@@ -1,0 +1,228 @@
+@reference '../../../../app.css';
+
+rubric-table {
+	@apply flex flex-col;
+
+	page-break-inside: avoid;
+	break-inside: avoid;
+
+	> :first-child {
+		@apply border-t-3;
+	}
+
+	> * {
+		@apply border-b-3;
+	}
+
+	scroll-container {
+		@apply grow overflow-x-auto;
+
+		> content {
+			@apply flex grow flex-row items-stretch justify-center text-left text-sm;
+
+			> * {
+				@apply flex-1 p-2;
+			}
+
+			> :not(:first-child) {
+				@apply border-l;
+			}
+		}
+	}
+
+	criteria {
+		@apply flex grow flex-col items-center justify-center p-2 text-center;
+	}
+
+	scoring {
+		@apply flex max-w-28 min-w-28 flex-0 flex-row flex-wrap content-center justify-center text-center text-xs;
+	}
+
+	rubric-header {
+		@apply flex flex-row;
+
+		> :first-child {
+			@apply border-l-3;
+		}
+
+		> * {
+			@apply border-r-3;
+		}
+	}
+
+	&.notebook-rubric {
+		/*
+		 * Shown from `lg` up; below that the stacked view in NotebookRubricTable.svelte
+		 * takes over.
+		 *
+		 * This has to live here rather than as `hidden lg:flex` on the element, which is
+		 * what it was first written as — and which did nothing, leaving both views on
+		 * screen at once. Tailwind v4 emits its utilities inside `@layer utilities`, while
+		 * the `rubric-table { @apply flex flex-col }` rule above is unlayered. Unlayered
+		 * styles beat layered ones outright, whatever their specificity, so `display: flex`
+		 * on the element won against `.hidden` every time.
+		 *
+		 * Same trap as the dark-mode rules at the bottom of this file: anything competing
+		 * with these declarations has to be written here, beside them.
+		 */
+		display: none;
+
+		/* lg */
+		@media (width >= 64rem) {
+			display: flex;
+		}
+
+		> rubric-body:first-child {
+			@apply border-t-0;
+		}
+
+		rubric-body {
+			> row.section-title-row {
+				@apply border-t-3 bg-white;
+			}
+
+			> row.section-header-row {
+				@apply border-t bg-gray-200;
+
+				criteria,
+				scoring {
+					@apply items-center justify-center;
+				}
+
+				> scroll-container content {
+					@apply min-h-10;
+				}
+			}
+
+			> row.criteria-row > scroll-container content {
+				@apply min-h-21;
+			}
+
+			> row.footer-row > div {
+				@apply grow border-r-3 border-l-3;
+			}
+		}
+	}
+
+	/*
+	 * Team Interview Rubric, GRSF v2.0.
+	 *
+	 * Two columns rather than the notebook's six. The scoring column is much wider than the
+	 * shared default because it holds the three evidence descriptions as buttons — the judge
+	 * is choosing between sentences, not nudging a number, so the sentences have to be
+	 * legible without a horizontal scroll.
+	 */
+	&.interview-rubric {
+		/* Same switch as the notebook rubric above, and here for the same reason. */
+		display: none;
+
+		/* lg */
+		@media (width >= 64rem) {
+			display: flex;
+		}
+
+		> rubric-body:first-child {
+			@apply border-t-0;
+		}
+
+		/*
+		 * One width, not a responsive pair. The narrow variant existed for phones, which
+		 * now get the stacked view instead — this table only ever renders at `lg` and up,
+		 * where the `sm` breakpoint is always true and the base width never applied.
+		 */
+		scoring {
+			@apply max-w-56 min-w-56;
+		}
+
+		rubric-body {
+			> row.section-title-row {
+				@apply border-t-3 bg-white;
+			}
+
+			> row.sample-questions-row {
+				@apply bg-gray-50;
+			}
+
+			> row.section-header-row {
+				@apply border-t bg-gray-200;
+			}
+
+			> row.footer-row > div {
+				@apply grow border-r-3 border-l-3;
+			}
+		}
+	}
+
+	rubric-body {
+		@apply flex flex-col;
+
+		> :not(:first-child) {
+			@apply border-t;
+		}
+
+		> row {
+			@apply flex flex-row;
+
+			> :first-child {
+				@apply border-l-3;
+			}
+
+			> * {
+				@apply grow border-r-3;
+			}
+
+			scroll-container {
+				content {
+					@apply min-h-23;
+				}
+			}
+		}
+	}
+
+	:not(:last-child) {
+		> scroll-container {
+			scrollbar-width: none;
+		}
+	}
+}
+
+/*
+ * The stacked view, and the other half of the same switch.
+ *
+ * Exactly one of these two is on screen at any width. Both breakpoints are written here,
+ * rather than this one being an `lg:hidden` in the markup, because the table's cannot be a
+ * utility at all — see the note on `.notebook-rubric` above — and a pair of complementary
+ * rules kept in two different places is one someone will eventually align the wrong way.
+ */
+.rubric-stacked {
+	display: block;
+}
+
+/* lg */
+@media (width >= 64rem) {
+	.rubric-stacked {
+		display: none;
+	}
+}
+
+/*
+ * Print always gets the table.
+ *
+ * The stacked view is chosen by viewport width, and an A4 page is about 794 CSS pixels —
+ * under the `lg` breakpoint. Left alone, printing a rubric from a desktop browser would
+ * produce the phone layout: sixteen criteria as tall cards, several pages of them, with
+ * the printed rubric no longer resembling the one GRSF publishes.
+ *
+ * These need !important because they are fighting Tailwind's own `hidden` and `lg:flex`
+ * utilities, which are equally specific and come later in the cascade.
+ */
+@media print {
+	.rubric-stacked {
+		display: none !important;
+	}
+
+	rubric-table.notebook-rubric,
+	rubric-table.interview-rubric {
+		display: flex !important;
+	}
+}

@@ -1,0 +1,536 @@
+<script lang="ts">
+	import { m } from '$lib/paraglide/messages.js';
+	import { generateQrCodeDataUrl } from '$lib/qrcode';
+	import './rubric.css';
+	import { app, tabs, subscriptions, dialogs } from '$lib/index.svelte';
+	import type { NotebookRubricTab } from '$lib/tab.svelte';
+	import { generateUUID } from '$lib/utils.svelte';
+	import { untrack } from 'svelte';
+	import { sortByAssignedTeams, sortByNotebookDevelopmentStatus, sortByTeamNumber } from '$lib/team.svelte';
+	import { createEmptyNotebookRubricScores, NOTEBOOK_RUBRIC_CRITERIA_COUNT, sumRubricScores } from '@robotools.app/protocol/src/rubric';
+	import { canEnterNotebookRubric, needsDevelopmentStatusDecision } from '@robotools.app/protocol/src/team';
+	import AwardRankingTable from './AwardRankingTable.svelte';
+	import NotebookRubricTable from './NotebookRubricTable.svelte';
+	import NotebookDevelopmentStatusDialog from './NotebookDevelopmentStatusDialog.svelte';
+	import RoleSelectionDialog from '../RoleSelectionDialog.svelte';
+	import WarningSign from './WarningSign.svelte';
+	import TeamPhotoAlbum from '../TeamPhotoAlbum.svelte';
+	import { sanitizeHTMLMessage } from '$lib/i18n';
+	import { getLocale } from '$lib/paraglide/runtime';
+
+	interface Props {
+		tab: NotebookRubricTab;
+		isActive: boolean;
+	}
+
+	let { tab, isActive }: Props = $props();
+
+	const includedTeams = $derived(app.getAllTeamInfoAndData());
+	const essentialData = $derived(app.getEssentialData());
+	const isAssignedJudging = $derived(essentialData?.judgingMethod === 'assigned');
+	const accessControlEnabled = $derived(app.isAccessControlEnabled());
+	const isJudgeAdvisor = $derived(app.getCurrentUser()?.role === 'judge_advisor');
+	const currentJudge = $derived(app.getCurrentUserJudge());
+	const currentJudgeGroup = $derived(app.getCurrentUserJudgeGroup());
+
+	// State for showing only assigned teams
+	let showOnlyAssignedTeams = $state(true);
+
+	let showValidationErrors = $state(false);
+	let isSubmitted = $state(tab.rubricId !== null);
+
+	let judgeId = $state<string | null>(null); // Store judge ID for existing rubrics
+	let rubricScores = $state<number[]>(createEmptyNotebookRubricScores());
+	let notes = $state('');
+	let innovateAwardNotes = $state('');
+	let timestamp = $state(0);
+
+	const canEditCurrentRubric = $derived(!accessControlEnabled || (currentJudge && judgeId === currentJudge.id));
+
+	// Track initial state for unsaved changes detection
+	let initialTeamId = $state('');
+	let initialRubricScores = $state<number[]>(createEmptyNotebookRubricScores());
+	let initialNotes = $state('');
+	let initialInnovateAwardNotes = $state('');
+
+	// Track unsaved changes
+	$effect(() => {
+		if (isSubmitted) {
+			// No unsaved changes when submitted
+			tab._isDataUnsaved = false;
+		} else {
+			// Check if any data has changed from initial state
+			const hasChanges =
+				tab.teamId !== initialTeamId ||
+				rubricScores.some((score, idx) => score !== initialRubricScores[idx]) ||
+				notes !== initialNotes ||
+				innovateAwardNotes !== initialInnovateAwardNotes;
+
+			tab._isDataUnsaved = hasChanges;
+		}
+	});
+
+	let teamsSelectElement: HTMLSelectElement | null = $state(null);
+
+	let qrCodeDataUrl = $state<string | null>(null);
+
+	async function loadRubric() {
+		if (!tab.rubricId) return;
+		try {
+			const existingRubric = await app.wrpcClient.judging.getEngineeringNotebookRubrics.query({ id: tab.rubricId! });
+			tab.teamId = existingRubric.teamId;
+			judgeId = existingRubric.judgeId;
+			rubricScores =
+				existingRubric.rubric.length === NOTEBOOK_RUBRIC_CRITERIA_COUNT
+					? (existingRubric.rubric as number[])
+					: createEmptyNotebookRubricScores();
+			notes = existingRubric.notes;
+			innovateAwardNotes = existingRubric.innovateAwardNotes;
+			timestamp = existingRubric.timestamp;
+
+			// Reset initial state to loaded values
+			initialTeamId = existingRubric.teamId;
+			initialRubricScores = [...(existingRubric.rubric as number[])];
+			initialNotes = existingRubric.notes;
+			initialInnovateAwardNotes = existingRubric.innovateAwardNotes;
+		} catch (error) {
+			console.error('Failed to load existing rubric:', error);
+			app.addErrorNotice(m.failed_to_load_existing_rubric());
+		}
+	}
+
+	// Load existing rubric data if rubricId is provided
+	$effect(() => {
+		untrack(loadRubric);
+	});
+
+	$effect(() => {
+		if (!isSubmitted) {
+			judgeId = currentJudge?.id ?? null;
+		}
+	});
+
+	$effect(() => {
+		if (tab.teamId) {
+			(async () => {
+				const notebookLink = includedTeams[tab.teamId].notebookLink;
+				if (notebookLink === '') {
+					qrCodeDataUrl = null;
+					return;
+				}
+				qrCodeDataUrl = await generateQrCodeDataUrl(notebookLink, {
+					margin: 2,
+					color: {
+						dark: '#000000',
+						light: '#FFFFFF'
+					},
+					errorCorrectionLevel: 'M'
+				});
+			})();
+		}
+	});
+
+	$effect(() => {
+		if (!teamsSelectElement) return;
+		// Update the select element to the current team id
+		teamsSelectElement.value = tab.teamId;
+	});
+
+	$effect(() => {
+		if (tab.teamId && !currentJudgeGroup?.assignedTeams.includes(tab.teamId)) {
+			// If the user is editing a team that is not assigned to them, uncheck the "Only show assigned teams" checkbox
+			// Such that the user can see all the teams in the event
+			showOnlyAssignedTeams = false;
+		}
+	});
+
+	function handleTeamSelectChange(event: Event) {
+		const target = event.target as HTMLSelectElement;
+		tab.teamId = target.value;
+	}
+
+	function handleShowOnlyAssignedTeamsChange(event: { currentTarget: EventTarget & HTMLInputElement }) {
+		const newState = event.currentTarget.checked;
+
+		if (newState && !currentJudgeGroup?.assignedTeams.includes(tab.teamId)) {
+			// Clear the team selection if the user is checking the box and the team is not assigned to them
+			tab.teamId = '';
+		}
+	}
+
+	// Scroll container references for synchronization
+	let mainScrollContainer: HTMLElement;
+
+	const teamsToShow = $derived.by(() => {
+		if (isAssignedJudging && showOnlyAssignedTeams && currentJudgeGroup && !isSubmitted) {
+			return sortByAssignedTeams(includedTeams, currentJudgeGroup.assignedTeams);
+		} else {
+			return sortByNotebookDevelopmentStatus(sortByTeamNumber(Object.values(includedTeams)));
+		}
+	});
+
+	/**
+	 * Warn that this team has nothing to read.
+	 *
+	 * Not the same as being unsorted. A team whose notebook came in as a link is unsorted all
+	 * the way up to the moment its rubric is saved, and that is now the ordinary path rather
+	 * than a mistake, so warning about it would train judges to click past the warning.
+	 */
+	function showNoNotebookSubmittedWarning(team: (typeof includedTeams)[string]): boolean {
+		return !isSubmitted && !canEnterNotebookRubric(team);
+	}
+
+	/**
+	 * Ask how developed the notebook is, once its rubric is in.
+	 *
+	 * Only for a team still carrying no judgement, which is either a link scored without a
+	 * sorting pass or one somebody marked not submitted and then scored anyway. A team
+	 * already sorted keeps what it was given; re-saving a rubric is not a reason to reopen a
+	 * decision, and the second judge to score a team should not be asked again.
+	 *
+	 * Runs after the rubric is safely saved and never throws into that path. Failing to
+	 * record the status leaves the team unsorted, which the Notebook Sorting tab still shows
+	 * and anyone can fix; losing the rubric would cost a judge their work.
+	 */
+	async function askForDevelopmentStatus(teamId: string) {
+		const team = includedTeams[teamId];
+		if (!team || !needsDevelopmentStatusDecision(team.notebookDevelopmentStatus)) {
+			return;
+		}
+
+		const chosen = await dialogs.showCustom(NotebookDevelopmentStatusDialog, {
+			props: { teamNumber: team.number, score: sumRubricScores(rubricScores) },
+			maxWidth: 'max-w-lg'
+		});
+
+		// Dismissed, or "Decide later". The team stays unsorted rather than being given a
+		// status it was never assessed for, and the sorting tab keeps showing it as undecided.
+		if (chosen !== 'developing' && chosen !== 'fully_developed') {
+			return;
+		}
+
+		try {
+			await app.wrpcClient.team.updateTeamData.mutation({
+				...team,
+				notebookDevelopmentStatus: chosen
+			});
+		} catch (error) {
+			app.reportWriteFailure(error, m.write_context_team_data());
+			app.addErrorNotice(m.failed_to_record_notebook_development_status());
+		}
+	}
+
+	async function saveRubric() {
+		if (!tab.teamId) {
+			app.addErrorNotice(m.please_select_a_team());
+			// Scroll to top to help user select team
+			mainScrollContainer.scrollTo({ top: 0, behavior: 'smooth' });
+			return;
+		}
+
+		if (!judgeId || !currentJudgeGroup) {
+			app.addErrorNotice('CRITICAL: Please switch to a judge');
+			return;
+		}
+
+		// Check if all scores are provided
+		const missingScores = rubricScores.some((score) => score === -1);
+		if (missingScores) {
+			showValidationErrors = true;
+			app.addErrorNotice(m.please_complete_all_scoring_sections());
+			return;
+		}
+
+		const scoredTeamId = tab.teamId;
+
+		try {
+			tab.rubricId = tab.rubricId || generateUUID();
+
+			// Save the rubric via WRPC
+			await app.wrpcClient.judging.completeEngineeringNotebookRubric.mutation({
+				judgeGroupId: currentJudgeGroup.id,
+				submission: {
+					id: tab.rubricId,
+					teamId: tab.teamId,
+					judgeId,
+					rubric: rubricScores,
+					notes,
+					innovateAwardNotes,
+					timestamp: (timestamp = Date.now())
+				}
+			});
+
+			isSubmitted = true;
+
+			// Update initial state to current saved state
+			initialTeamId = tab.teamId;
+			initialRubricScores = [...rubricScores];
+			initialNotes = notes;
+			initialInnovateAwardNotes = innovateAwardNotes;
+
+			app.addSuccessNotice(m.notebook_rubric_saved_successfully());
+		} catch (error) {
+			app.reportWriteFailure(error, m.write_context_rubric());
+			app.addErrorNotice(m.failed_to_save_notebook_rubric());
+			return;
+		}
+
+		await askForDevelopmentStatus(scoredTeamId);
+	}
+
+	/**
+	 * Discard this rubric entirely. Judge Advisor only.
+	 *
+	 * The confirmation names the judge and the team rather than asking "are you sure": the
+	 * whole risk here is deleting the wrong one of several rubrics that look alike in a
+	 * list, and a generic prompt does nothing about that.
+	 *
+	 * The tab closes afterwards rather than showing an empty form, because the thing it was
+	 * opened to display no longer exists.
+	 */
+	async function deleteRubric() {
+		if (!isJudgeAdvisor || !tab.rubricId || !tab.teamId) {
+			return;
+		}
+
+		const team = includedTeams[tab.teamId];
+		const judgeName = (judgeId && app.findJudgeById(judgeId)?.name) || m.unknown_judge();
+		// Whether this is the last thing the group holds for the team, which is what decides
+		// if the team goes back to needing review. Worth saying up front rather than letting
+		// the counters change unannounced.
+		const isLastForTeam =
+			Object.values(subscriptions.allSubmissionCaches).filter(
+				(cache) => cache.teamId === tab.teamId && cache.judgeGroupId === currentJudgeGroup?.id
+			).length <= 1;
+
+		const confirmed = await dialogs.showConfirmation({
+			title: m.delete_rubric_title(),
+			message:
+				m.delete_rubric_message({ judgeName, rubricKind: m.notebook_review(), teamNumber: team?.number ?? '' }) +
+				(isLastForTeam ? ' ' + m.delete_rubric_last_warning({ teamNumber: team?.number ?? '' }) : ''),
+			confirmText: m.delete_rubric(),
+			cancelText: m.cancel(),
+			confirmButtonClass: 'danger'
+		});
+
+		if (!confirmed) {
+			return;
+		}
+
+		try {
+			await app.wrpcClient.judging.deleteEngineeringNotebookRubric.mutation({ id: tab.rubricId });
+			app.addSuccessNotice(m.rubric_deleted());
+			tabs.closeTab(tab.id);
+		} catch (error) {
+			app.reportWriteFailure(error, m.write_context_delete_rubric());
+			app.addErrorNotice(m.failed_to_delete_rubric());
+		}
+	}
+
+	function closeRubric() {
+		tabs.closeTab(tab.id);
+	}
+
+	function editRubric() {
+		if (!canEditCurrentRubric) {
+			app.addErrorNotice(m.you_can_only_edit_your_own_rubrics());
+			return;
+		}
+		// Enable editing mode
+		isSubmitted = false;
+		showValidationErrors = false;
+
+		// Scroll to top
+		mainScrollContainer.scrollTo({ top: 0, behavior: 'smooth' });
+	}
+
+	function newRubric() {
+		// Reset all form data
+		tab.teamId = '';
+		tab.rubricId = null;
+		judgeId = null;
+		rubricScores = createEmptyNotebookRubricScores();
+		notes = '';
+		innovateAwardNotes = '';
+		showValidationErrors = false;
+		isSubmitted = false;
+
+		// Reset initial state to empty
+		initialTeamId = '';
+		initialRubricScores = createEmptyNotebookRubricScores();
+		initialNotes = '';
+		initialInnovateAwardNotes = '';
+
+		// Scroll to top
+		mainScrollContainer.scrollTo({ top: 0, behavior: 'smooth' });
+	}
+
+	function switchToJudge() {
+		dialogs.showCustom(RoleSelectionDialog, { props: {} });
+	}
+</script>
+
+<div class="h-full overflow-auto p-2 md:p-6" bind:this={mainScrollContainer}>
+	<div class="mx-auto max-w-5xl space-y-2 md:space-y-6">
+		<!-- Header -->
+
+		<div class="space-y-6 rounded-lg bg-white p-6 shadow-sm">
+			<div class="mb-4 flex items-center justify-between">
+				<h2 class="text-xl font-semibold text-gray-900">{m.notebook_review()}</h2>
+				{#if isSubmitted && canEditCurrentRubric}
+					<button onclick={editRubric} class="secondary tiny">{m.edit()}</button>
+				{/if}
+			</div>
+
+			<div class="mb-4">
+				{#if isSubmitted && tab.teamId}
+					<div class="mt-1 mb-2 text-base text-gray-900">
+						<strong>{m.team_hash()}</strong>: {includedTeams[tab.teamId].number}
+					</div>
+				{:else}
+					<label for="team-select" class="mb-2 block text-sm font-medium text-gray-700"><strong>{m.team_hash()}</strong></label>
+					<select id="team-select" bind:this={teamsSelectElement} class="classic mt-1 mb-2 block w-full" onchange={handleTeamSelectChange}>
+						<option value="">{m.select_a_team()}</option>
+						{#each teamsToShow as team (team.id)}
+							{@const devStatus = team.notebookDevelopmentStatus ?? null}
+							{@const statusText =
+								devStatus === 'fully_developed' ? ' (Fully Developed)' : devStatus === 'developing' ? ' (Developing)' : ''}
+							<option value={team.id} selected={team.id === tab.teamId}>{team.number}{statusText}</option>
+						{/each}
+					</select>
+				{/if}
+
+				<!-- Filter Controls -->
+				{#if isAssignedJudging && !isSubmitted && currentJudgeGroup}
+					<div class="mb-4">
+						<label class="flex items-center">
+							<input
+								type="checkbox"
+								bind:checked={showOnlyAssignedTeams}
+								class="mr-2 rounded border-gray-300"
+								onchange={handleShowOnlyAssignedTeamsChange}
+							/>
+							<span class="text-sm text-gray-700">
+								{m.only_show_assigned_teams_for_your_current_judge_group({ name: currentJudgeGroup.name })}
+							</span>
+						</label>
+					</div>
+				{/if}
+			</div>
+
+			{#if tab.teamId}
+				{@const selectedTeam = includedTeams[tab.teamId]}
+				{@const notebookLink = selectedTeam.notebookLink || '(Not provided)'}
+				<div class="mb-4 flex flex-row justify-between gap-2 rounded-lg bg-gray-50 p-4">
+					<div class="text-sm text-gray-800">
+						<p><strong>{m.team_hash()}{selectedTeam.number}:</strong> {selectedTeam.name}</p>
+						<p><strong>{m.school_colon()}</strong>{selectedTeam.school}</p>
+						<p><strong>{m.grade_level_colon()}</strong>{selectedTeam.grade}</p>
+						<p>
+							{#if notebookLink === '(Not provided)'}
+								<strong>{m.notebook_link_colon()}</strong>{notebookLink}
+							{:else}
+								<!-- An engineering notebook lives on someone else's site; resolve() takes an app route. -->
+								<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
+								<strong>{m.notebook_link_colon()}</strong><a class="text-blue-500 hover:text-blue-600" href={notebookLink} target="_blank"
+									>{notebookLink}</a
+								>
+							{/if}
+						</p>
+					</div>
+
+					{#if qrCodeDataUrl}
+						<img src={qrCodeDataUrl} alt="QR Code for engineering notebook" class="h-48 w-48 rounded max-sm:hidden" />
+					{/if}
+				</div>
+
+				<div class="mb-4 rounded-lg bg-gray-50 p-4">
+					<TeamPhotoAlbum teamId={tab.teamId} allowCapture={false} />
+				</div>
+
+				{#if showNoNotebookSubmittedWarning(selectedTeam)}
+					<WarningSign title={m.notebook_development_status()}>
+						<p>
+							{@html sanitizeHTMLMessage(m.notebook_development_status_warning)}
+						</p>
+					</WarningSign>
+				{/if}
+				{#if selectedTeam.absent}
+					<WarningSign title={m.absent_team()}>
+						<p>{m.absent_team_description()}</p>
+					</WarningSign>
+				{/if}
+			{/if}
+
+			<!-- Current Judge Information (Read-only) -->
+			<div class="mt-2 text-sm text-gray-700">
+				{#if judgeId}
+					<p><strong>{m.judge_name_colon()}</strong>{app.findJudgeById(judgeId)?.name}</p>
+				{:else if isJudgeAdvisor && !accessControlEnabled}
+					<p>
+						{m.please_switch_to_a_judge()}&nbsp;<button onclick={switchToJudge} class="text-blue-500 hover:text-blue-600"
+							>{m.switch_to_judge()}</button
+						>
+					</p>
+				{:else if isJudgeAdvisor}
+					<!-- With access control on the Judge Advisor cannot become a judge, so offer
+					     the explanation instead of a link that cannot work. -->
+					<p>{m.switching_roles_disabled_with_access_control()}</p>
+				{/if}
+				<!-- Submission Timestamp -->
+				{#if tab.rubricId}
+					<div class="text-sm text-gray-700">
+						<p><strong>{m.submitted_at_colon()}</strong>{new Date(timestamp).toLocaleString(getLocale())}</p>
+					</div>
+				{/if}
+			</div>
+		</div>
+		<div class="rounded-lg bg-white p-3 shadow-sm sm:p-6">
+			<p class="mb-2 text-sm text-gray-600">
+				{@html sanitizeHTMLMessage(m.notebook_rubric_directions)}
+			</p>
+			<p class="mb-6 text-sm text-gray-600">
+				{@html sanitizeHTMLMessage(m.notebook_rubric_notes)}
+			</p>
+
+			<NotebookRubricTable bind:rubricScores bind:notes bind:innovateAwardNotes {isSubmitted} {showValidationErrors} />
+
+			<p class="mt-2 text-center text-xs italic">
+				{m.judging_materials_strictly_confidential_description()}
+			</p>
+
+			<div class="mt-6 flex justify-center gap-4">
+				{#if isSubmitted}
+					{#if canEditCurrentRubric}
+						<button onclick={editRubric} class="secondary">{m.edit_rubric()}</button>
+					{/if}
+					<button onclick={closeRubric} class="secondary">{m.close_rubric()}</button>
+					{#if isJudgeAdvisor}
+						<button onclick={deleteRubric} class="danger">{m.delete_rubric()}</button>
+					{/if}
+					{#if !accessControlEnabled || currentJudge}
+						<button onclick={newRubric} class="primary">{m.new_rubric()}</button>
+					{/if}
+				{:else}
+					<button onclick={saveRubric} class="primary" disabled={!judgeId || !canEditCurrentRubric}>{m.submit_rubric()}</button>
+				{/if}
+			</div>
+		</div>
+
+		<!-- Award Rankings Section -->
+		{#if tab.teamId && currentJudgeGroup && subscriptions.allJudgeGroupsAwardRankings[currentJudgeGroup.id]}
+			<div class="rounded-lg bg-white p-3 shadow-sm sm:p-6">
+				<h3 class="mb-4 text-lg font-semibold text-gray-900">{m.award_candidate_ranking()}</h3>
+				<p class="mb-4 text-sm text-gray-600">
+					{m.notebook_rubric_award_candidate_ranking_description()}
+				</p>
+				<AwardRankingTable
+					title=""
+					judgeGroup={currentJudgeGroup}
+					showingTeams={{ targetTeams: [tab.teamId] }}
+					bypassAwardRequirements={false}
+				/>
+			</div>
+		{/if}
+	</div>
+</div>

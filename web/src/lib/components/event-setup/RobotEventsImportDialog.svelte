@@ -1,0 +1,67 @@
+<script lang="ts" module>
+	// Module scope, because EventCodeSetup imports this type. An `export` in the instance
+	// script below would mean a component export, and a type cannot be one.
+	export type ImportChoice = 'teams' | 'full' | null;
+</script>
+
+<script lang="ts">
+	import { m } from '$lib/paraglide/messages.js';
+	import { dialogs } from '$lib/index.svelte';
+	import Dialog from '$lib/components/dialog/Dialog.svelte';
+
+	// No props: this dialog reports its outcome through dialogs.closeDialog.
+
+	function handleTeams() {
+		dialogs.closeDialog('teams' as ImportChoice);
+	}
+
+	function handleFullSetup() {
+		dialogs.closeDialog('full' as ImportChoice);
+	}
+
+	function handleCancel() {
+		dialogs.closeDialog(null);
+	}
+</script>
+
+<Dialog open={true} onClose={handleCancel} innerContainerClass="max-w-lg">
+	<!-- Title -->
+	<h3 id="dialog-title" class="mb-4 text-lg font-semibold text-gray-900">{m.import_from_robotevents()}</h3>
+
+	<!-- Description -->
+	<p id="dialog-message" class="mb-6 text-sm text-gray-600">
+		{m.how_do_you_want_to_import_from_robotevents()}
+	</p>
+
+	<!-- Choice Buttons -->
+	<div class="mb-6 space-y-4">
+		<!-- Import Teams -->
+		<button
+			onclick={handleTeams}
+			class="w-full rounded-lg border border-gray-300 p-4 text-left hover:bg-gray-50 focus:border-transparent focus:ring-2 focus:ring-blue-500 focus:outline-none"
+		>
+			<div class="mb-2 font-medium text-gray-900">{m.import_teams()}</div>
+			<div class="text-sm text-gray-600">
+				{m.import_teams_description()}
+			</div>
+		</button>
+
+		<!-- Import Full Setup -->
+		<button
+			onclick={handleFullSetup}
+			class="w-full rounded-lg border border-gray-300 p-4 text-left hover:bg-gray-50 focus:border-transparent focus:ring-2 focus:ring-blue-500 focus:outline-none"
+		>
+			<div class="mb-2 font-medium text-gray-900">{m.import_full_setup()}</div>
+			<div class="text-sm text-gray-600">
+				{m.import_full_setup_description()}
+			</div>
+		</button>
+	</div>
+
+	<!-- Cancel Button -->
+	<div class="flex justify-end">
+		<button onclick={handleCancel} class="secondary">
+			{m.cancel()}
+		</button>
+	</div>
+</Dialog>

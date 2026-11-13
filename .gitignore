@@ -1,0 +1,17 @@
+node_modules
+.secrets
+.event-file.json
+
+# Environment files carry the admin credentials. Only the example is tracked.
+.env
+.env.*
+*.env
+!*.env.example
+
+# Local SQLite data.
+data/
+worker/data/
+
+# OS cruft.
+.DS_Store
+Thumbs.db

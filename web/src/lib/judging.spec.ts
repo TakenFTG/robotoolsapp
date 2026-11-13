@@ -1,0 +1,594 @@
+import { describe, it, expect, beforeEach } from 'vitest';
+import { v4 as uuidv4 } from 'uuid';
+import {
+	assignTeamsLevellingGroups,
+	createJudge,
+	EditingJudgeGroup,
+	createJudgeFromString,
+	parseJudgeNamesFromInput,
+	randomlyAssignTeamsToGroups,
+	getJudgesInGroup,
+	type TeamAssignableGroup
+} from './judging.svelte';
+import { type TeamInfoAndData } from './team.svelte';
+import { JudgeSchema, type Judge } from '@robotools.app/protocol/src/judging';
+import { type Grade } from '@robotools.app/protocol/src/award';
+import { type NotebookDevelopmentStatus } from '@robotools.app/protocol/src/team';
+
+describe('Judge Class', () => {
+	let judge: Judge;
+	const mockId = uuidv4();
+	const mockGroupId = uuidv4();
+
+	beforeEach(() => {
+		judge = createJudge(mockId, 'John Doe', mockGroupId);
+	});
+
+	it('should create a Judge instance with correct properties', () => {
+		expect(judge.id).toBe(mockId);
+		expect(judge.name).toBe('John Doe');
+		expect(judge.groupId).toBe(mockGroupId);
+	});
+
+	it('should allow modification of mutable properties', () => {
+		judge.name = 'Jane Smith';
+		judge.groupId = uuidv4();
+
+		expect(judge.name).toBe('Jane Smith');
+		expect(judge.groupId).not.toBe(mockGroupId);
+	});
+
+	it('should have readonly id property', () => {
+		expect(judge.id).toBe(mockId);
+		// TypeScript should prevent modification of id at compile time
+		expect(typeof judge.id).toBe('string');
+	});
+});
+
+describe('EditingJudgeGroup', () => {
+	let judgeGroup: EditingJudgeGroup;
+	let mockTeams: TeamInfoAndData[];
+
+	beforeEach(() => {
+		judgeGroup = new EditingJudgeGroup('Technical Judges');
+
+		// Create mock teams
+		const teamId1 = uuidv4();
+		const teamId2 = uuidv4();
+		const teamId3 = uuidv4();
+		mockTeams = [
+			{
+				id: teamId1,
+				number: '123A',
+				name: 'Team Alpha',
+				city: 'City A',
+				state: 'State A',
+				country: 'Country A',
+				shortName: 'TA',
+				school: 'School A',
+				grade: 'High School' as Grade,
+				group: '123',
+				notebookLink: 'https://example.com/notebook-a',
+				hasInnovateAwardSubmissionForm: false,
+				notebookDevelopmentStatus: 'undetermined' as NotebookDevelopmentStatus,
+				hasSeasonSummary: false,
+				absent: false
+			},
+			{
+				id: teamId2,
+				number: '456B',
+				name: 'Team Beta',
+				city: 'City B',
+				state: 'State B',
+				country: 'Country B',
+				shortName: 'TB',
+				school: 'School B',
+				grade: 'Middle School' as Grade,
+				group: '456',
+				notebookLink: 'https://example.com/notebook-b',
+				hasInnovateAwardSubmissionForm: false,
+				notebookDevelopmentStatus: 'undetermined' as NotebookDevelopmentStatus,
+				hasSeasonSummary: false,
+				absent: false
+			},
+			{
+				id: teamId3,
+				number: '789C',
+				name: 'Team Gamma',
+				city: 'City C',
+				state: 'State C',
+				country: 'Country C',
+				shortName: 'TC',
+				school: 'School C',
+				grade: 'College' as Grade,
+				group: '789',
+				notebookLink: 'https://example.com/notebook-c',
+				hasInnovateAwardSubmissionForm: false,
+				notebookDevelopmentStatus: 'undetermined' as NotebookDevelopmentStatus,
+				hasSeasonSummary: false,
+				absent: false
+			}
+		];
+	});
+
+	it('should create a EditingJudgeGroup instance with correct properties', () => {
+		expect(judgeGroup.name).toBe('Technical Judges');
+		expect(judgeGroup.assignedTeams).toEqual([]);
+		expect(typeof judgeGroup.id).toBe('string');
+		expect(judgeGroup.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+	});
+
+	it('should allow modification of name', () => {
+		judgeGroup.name = 'Design Panel';
+		expect(judgeGroup.name).toBe('Design Panel');
+	});
+
+	it('should assign teams correctly', () => {
+		judgeGroup.assignTeam(mockTeams[0]);
+		expect(judgeGroup.assignedTeams).toHaveLength(1);
+		expect(judgeGroup.assignedTeams[0].id).toBe(mockTeams[0].id);
+
+		judgeGroup.assignTeam(mockTeams[1]);
+		expect(judgeGroup.assignedTeams).toHaveLength(2);
+		expect(judgeGroup.assignedTeams[1].id).toBe(mockTeams[1].id);
+	});
+
+	it('should not assign duplicate teams', () => {
+		judgeGroup.assignTeam(mockTeams[0]);
+		judgeGroup.assignTeam(mockTeams[0]); // Try to assign same team again
+
+		expect(judgeGroup.assignedTeams).toHaveLength(1);
+		expect(judgeGroup.assignedTeams[0].id).toBe(mockTeams[0].id);
+	});
+
+	it('should unassign teams correctly', () => {
+		judgeGroup.assignTeam(mockTeams[0]);
+		judgeGroup.assignTeam(mockTeams[1]);
+		judgeGroup.assignTeam(mockTeams[2]);
+
+		expect(judgeGroup.assignedTeams).toHaveLength(3);
+
+		judgeGroup.unassignTeam(mockTeams[1].id);
+		expect(judgeGroup.assignedTeams).toHaveLength(2);
+		expect(judgeGroup.assignedTeams.find((t) => t.id === mockTeams[1].id)).toBeUndefined();
+		expect(judgeGroup.assignedTeams.find((t) => t.id === mockTeams[0].id)).toBeDefined();
+		expect(judgeGroup.assignedTeams.find((t) => t.id === mockTeams[2].id)).toBeDefined();
+	});
+
+	it('should handle unassigning non-existent teams gracefully', () => {
+		judgeGroup.assignTeam(mockTeams[0]);
+		expect(judgeGroup.assignedTeams).toHaveLength(1);
+
+		judgeGroup.unassignTeam('non-existent-id');
+		expect(judgeGroup.assignedTeams).toHaveLength(1);
+		expect(judgeGroup.assignedTeams[0].id).toBe(mockTeams[0].id);
+	});
+
+	it('should handle unassigning from empty group gracefully', () => {
+		expect(judgeGroup.assignedTeams).toHaveLength(0);
+		judgeGroup.unassignTeam(mockTeams[0].id);
+		expect(judgeGroup.assignedTeams).toHaveLength(0);
+	});
+});
+
+describe('createJudgeFromString', () => {
+	it('should create judge with correct properties', () => {
+		const groupId = uuidv4();
+		const judge = createJudgeFromString('John Doe', groupId);
+
+		expect(judge.name).toBe('John Doe');
+		expect(judge.groupId).toBe(groupId);
+		expect(typeof judge.id).toBe('string');
+		expect(judge.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+	});
+
+	it('should trim whitespace from name', () => {
+		const groupId = uuidv4();
+		const judge = createJudgeFromString('  John Doe  ', groupId);
+
+		expect(judge.name).toBe('John Doe');
+		expect(judge.groupId).toBe(groupId);
+	});
+
+	it('should handle empty string after trimming', () => {
+		const groupId = uuidv4();
+		const judge = createJudgeFromString('   ', groupId);
+
+		expect(judge.name).toBe('');
+		expect(judge.groupId).toBe(groupId);
+	});
+});
+
+describe('parseJudgeNamesFromInput', () => {
+	it('should parse comma-separated names', () => {
+		const input = 'John Doe, Jane Smith, Bob Johnson';
+		const names = parseJudgeNamesFromInput(input);
+
+		expect(names).toEqual(['John Doe', 'Jane Smith', 'Bob Johnson']);
+	});
+
+	it('should parse newline-separated names', () => {
+		const input = 'John Doe\nJane Smith\nBob Johnson';
+		const names = parseJudgeNamesFromInput(input);
+
+		expect(names).toEqual(['John Doe', 'Jane Smith', 'Bob Johnson']);
+	});
+
+	it('should parse mixed comma and newline separated names', () => {
+		const input = 'John Doe, Jane Smith\nBob Johnson, Alice Williams';
+		const names = parseJudgeNamesFromInput(input);
+
+		expect(names).toEqual(['John Doe', 'Jane Smith', 'Bob Johnson', 'Alice Williams']);
+	});
+
+	it('should trim whitespace from names', () => {
+		const input = '  John Doe  ,   Jane Smith   \n  Bob Johnson  ';
+		const names = parseJudgeNamesFromInput(input);
+
+		expect(names).toEqual(['John Doe', 'Jane Smith', 'Bob Johnson']);
+	});
+
+	it('should filter out empty names', () => {
+		const input = 'John Doe, , Jane Smith,\n, Bob Johnson,';
+		const names = parseJudgeNamesFromInput(input);
+
+		expect(names).toEqual(['John Doe', 'Jane Smith', 'Bob Johnson']);
+	});
+
+	it('should handle empty input', () => {
+		const names = parseJudgeNamesFromInput('');
+		expect(names).toEqual([]);
+	});
+
+	it('should handle whitespace-only input', () => {
+		const names = parseJudgeNamesFromInput('   \n  \t  ');
+		expect(names).toEqual([]);
+	});
+
+	it('should handle single name', () => {
+		const names = parseJudgeNamesFromInput('John Doe');
+		expect(names).toEqual(['John Doe']);
+	});
+});
+
+describe('randomlyAssignTeamsToGroups', () => {
+	let mockTeams: TeamInfoAndData[];
+	let judgeGroups: EditingJudgeGroup[];
+
+	beforeEach(() => {
+		// Create mock teams
+		mockTeams = Array.from({ length: 10 }, (_, i) => {
+			const teamId = uuidv4();
+			return {
+				id: teamId,
+				number: `${100 + i}A`,
+				name: `Team ${i + 1}`,
+				city: `City ${i + 1}`,
+				state: `State ${i + 1}`,
+				country: `Country ${i + 1}`,
+				shortName: `T${i + 1}`,
+				school: `School ${i + 1}`,
+				grade: 'High School' as Grade,
+				group: `${100 + i}`,
+				notebookLink: `https://example.com/notebook-${i + 1}`,
+				hasInnovateAwardSubmissionForm: false,
+				notebookDevelopmentStatus: 'undetermined' as NotebookDevelopmentStatus,
+				hasSeasonSummary: false,
+				absent: false
+			};
+		});
+
+		// Create judge groups
+		judgeGroups = [new EditingJudgeGroup('Group A'), new EditingJudgeGroup('Group B'), new EditingJudgeGroup('Group C')];
+	});
+
+	it('should assign all teams to groups', () => {
+		randomlyAssignTeamsToGroups(mockTeams, judgeGroups);
+
+		const totalAssignedTeams = judgeGroups.reduce((sum, group) => sum + group.assignedTeams.length, 0);
+		expect(totalAssignedTeams).toBe(mockTeams.length);
+	});
+
+	it('should distribute teams as evenly as possible', () => {
+		randomlyAssignTeamsToGroups(mockTeams, judgeGroups);
+
+		const teamCounts = judgeGroups.map((group) => group.assignedTeams.length);
+		const maxCount = Math.max(...teamCounts);
+		const minCount = Math.min(...teamCounts);
+
+		// With 10 teams and 3 groups, distribution should be [4, 3, 3] or [3, 4, 3] etc.
+		expect(maxCount - minCount).toBeLessThanOrEqual(1);
+	});
+
+	it('should assign each team to exactly one group', () => {
+		randomlyAssignTeamsToGroups(mockTeams, judgeGroups);
+
+		const assignedTeamIds = new Set<string>();
+		judgeGroups.forEach((group) => {
+			group.assignedTeams.forEach((team) => {
+				expect(assignedTeamIds.has(team.id)).toBe(false);
+				assignedTeamIds.add(team.id);
+			});
+		});
+
+		expect(assignedTeamIds.size).toBe(mockTeams.length);
+	});
+
+	it('should clear existing assignments before new assignment', () => {
+		// Pre-assign some teams
+		judgeGroups[0].assignTeam(mockTeams[0]);
+		judgeGroups[1].assignTeam(mockTeams[1]);
+
+		randomlyAssignTeamsToGroups(mockTeams, judgeGroups);
+
+		// Check that all teams are still assigned (no duplicates or missing teams)
+		const totalAssignedTeams = judgeGroups.reduce((sum, group) => sum + group.assignedTeams.length, 0);
+		expect(totalAssignedTeams).toBe(mockTeams.length);
+	});
+
+	it('should handle empty teams array', () => {
+		randomlyAssignTeamsToGroups([], judgeGroups);
+
+		judgeGroups.forEach((group) => {
+			expect(group.assignedTeams).toHaveLength(0);
+		});
+	});
+
+	it('should handle empty judge groups array', () => {
+		// Should not throw error
+		expect(() => randomlyAssignTeamsToGroups(mockTeams, [])).not.toThrow();
+	});
+
+	it('should handle single judge group', () => {
+		const singleGroup = [new EditingJudgeGroup('Only Group')];
+		randomlyAssignTeamsToGroups(mockTeams, singleGroup);
+
+		expect(singleGroup[0].assignedTeams).toHaveLength(mockTeams.length);
+	});
+
+	it('should handle more groups than teams', () => {
+		const manyGroups = Array.from({ length: 15 }, (_, i) => new EditingJudgeGroup(`Group ${i + 1}`));
+
+		randomlyAssignTeamsToGroups(mockTeams, manyGroups);
+
+		const totalAssignedTeams = manyGroups.reduce((sum, group) => sum + group.assignedTeams.length, 0);
+		expect(totalAssignedTeams).toBe(mockTeams.length);
+
+		// Some groups should be empty
+		const emptyGroups = manyGroups.filter((group) => group.assignedTeams.length === 0);
+		expect(emptyGroups.length).toBe(manyGroups.length - mockTeams.length);
+	});
+});
+
+describe('getJudgesInGroup', () => {
+	let judges: Judge[];
+	let groupIds: string[];
+
+	beforeEach(() => {
+		groupIds = [uuidv4(), uuidv4(), uuidv4()];
+
+		judges = [
+			createJudge(uuidv4(), 'John Doe', groupIds[0]),
+			createJudge(uuidv4(), 'Jane Smith', groupIds[0]),
+			createJudge(uuidv4(), 'Bob Johnson', groupIds[1]),
+			createJudge(uuidv4(), 'Alice Williams', groupIds[1]),
+			createJudge(uuidv4(), 'Charlie Brown', groupIds[2])
+		];
+	});
+
+	it('should return judges in specified group', () => {
+		const group0Judges = getJudgesInGroup(judges, groupIds[0]);
+		expect(group0Judges).toHaveLength(2);
+		expect(group0Judges.map((j) => j.name)).toEqual(['John Doe', 'Jane Smith']);
+
+		const group1Judges = getJudgesInGroup(judges, groupIds[1]);
+		expect(group1Judges).toHaveLength(2);
+		expect(group1Judges.map((j) => j.name)).toEqual(['Bob Johnson', 'Alice Williams']);
+
+		const group2Judges = getJudgesInGroup(judges, groupIds[2]);
+		expect(group2Judges).toHaveLength(1);
+		expect(group2Judges.map((j) => j.name)).toEqual(['Charlie Brown']);
+	});
+
+	it('should return empty array for non-existent group', () => {
+		const nonExistentGroupId = uuidv4();
+		const result = getJudgesInGroup(judges, nonExistentGroupId);
+		expect(result).toEqual([]);
+	});
+
+	it('should handle empty judges array', () => {
+		const result = getJudgesInGroup([], groupIds[0]);
+		expect(result).toEqual([]);
+	});
+
+	it('should return all judges if they all belong to the same group', () => {
+		const sameGroupJudges = judges.map((judge) => {
+			judge.groupId = groupIds[0];
+			return judge;
+		});
+
+		const result = getJudgesInGroup(sameGroupJudges, groupIds[0]);
+		expect(result).toHaveLength(judges.length);
+	});
+});
+
+describe('Integration Tests', () => {
+	it('should create complete judging workflow', () => {
+		// Create judge groups
+		const group1 = new EditingJudgeGroup('Technical Judges');
+		const group2 = new EditingJudgeGroup('Design Panel');
+
+		// Create judges
+		const judgeNames = parseJudgeNamesFromInput('John Doe, Jane Smith\nBob Johnson, Alice Williams');
+		const judges1 = judgeNames.slice(0, 2).map((name) => createJudgeFromString(name, group1.id));
+		const judges2 = judgeNames.slice(2).map((name) => createJudgeFromString(name, group2.id));
+		const allJudges = [...judges1, ...judges2];
+
+		// Create teams
+		const teams = Array.from({ length: 6 }, (_, i) => {
+			const teamId = uuidv4();
+			return {
+				id: teamId,
+				number: `${100 + i}A`,
+				name: `Team ${i + 1}`,
+				city: `City ${i + 1}`,
+				state: `State ${i + 1}`,
+				country: `Country ${i + 1}`,
+				shortName: `T${i + 1}`,
+				school: `School ${i + 1}`,
+				grade: 'High School' as Grade,
+				group: `${100 + i}`,
+				notebookLink: `https://example.com/notebook-${i + 1}`,
+				hasInnovateAwardSubmissionForm: false,
+				notebookDevelopmentStatus: 'undetermined' as NotebookDevelopmentStatus,
+				hasSeasonSummary: false,
+				absent: false
+			};
+		});
+
+		// Assign teams to groups
+		randomlyAssignTeamsToGroups(teams, [group1, group2]);
+
+		// Verify integration
+		expect(group1.assignedTeams.length + group2.assignedTeams.length).toBe(teams.length);
+		expect(getJudgesInGroup(allJudges, group1.id)).toHaveLength(2);
+		expect(getJudgesInGroup(allJudges, group2.id)).toHaveLength(2);
+
+		// Verify all judges are properly assigned
+		allJudges.forEach((judge) => {
+			expect(() =>
+				JudgeSchema.parse({
+					id: judge.id,
+					name: judge.name,
+					groupId: judge.groupId
+				})
+			).not.toThrow();
+		});
+	});
+
+	it('should handle edge cases in complete workflow', () => {
+		// Empty judges and teams
+		const emptyGroups = [new EditingJudgeGroup('Empty Group')];
+		randomlyAssignTeamsToGroups([], emptyGroups);
+
+		expect(emptyGroups[0].assignedTeams).toHaveLength(0);
+		expect(getJudgesInGroup([], emptyGroups[0].id)).toHaveLength(0);
+
+		// Single judge, single team
+		const singleGroup = new EditingJudgeGroup('Single Group');
+		const singleJudge = createJudgeFromString('Solo Judge', singleGroup.id);
+		const soloTeamId = uuidv4();
+		const singleTeam: TeamInfoAndData = {
+			id: soloTeamId,
+			number: '100A',
+			name: 'Solo Team',
+			city: 'City',
+			state: 'State',
+			country: 'Country',
+			shortName: 'ST',
+			school: 'School',
+			grade: 'High School',
+			group: '100',
+			notebookLink: 'https://example.com/notebook',
+			hasInnovateAwardSubmissionForm: false,
+			notebookDevelopmentStatus: 'undetermined',
+			hasSeasonSummary: false,
+			absent: false
+		};
+
+		randomlyAssignTeamsToGroups([singleTeam], [singleGroup]);
+
+		expect(singleGroup.assignedTeams).toHaveLength(1);
+		expect(singleGroup.assignedTeams[0].id).toBe(singleTeam.id);
+		expect(getJudgesInGroup([singleJudge], singleGroup.id)).toHaveLength(1);
+	});
+});
+
+/**
+ * A deterministic stand-in for Math.random, so a test asserts a property rather than a
+ * particular shuffle. Cycles through the given values.
+ */
+function sequence(values: number[]): () => number {
+	let index = 0;
+	return () => values[index++ % values.length]!;
+}
+
+function group(id: string, assignedTeams: string[] = []): TeamAssignableGroup {
+	return { id, name: id, assignedTeams };
+}
+
+function sizes(groups: { assignedTeams: string[] }[]): number[] {
+	return groups.map((entry) => entry.assignedTeams.length);
+}
+
+describe('assignTeamsLevellingGroups', () => {
+	it('places every team exactly once', () => {
+		const result = assignTeamsLevellingGroups([group('a'), group('b')], ['t1', 't2', 't3', 't4', 't5']);
+		const placed = result.flatMap((entry) => entry.assignedTeams);
+
+		expect(placed.toSorted()).toEqual(['t1', 't2', 't3', 't4', 't5']);
+	});
+
+	it('leaves existing assignments alone', () => {
+		const result = assignTeamsLevellingGroups([group('a', ['kept1', 'kept2']), group('b', ['kept3'])], ['new1', 'new2']);
+
+		expect(result[0]!.assignedTeams.slice(0, 2)).toEqual(['kept1', 'kept2']);
+		expect(result[1]!.assignedTeams.slice(0, 1)).toEqual(['kept3']);
+	});
+
+	it('evens out totals rather than splitting the pile equally', () => {
+		// 'a' already covers four teams and 'b' none. An equal split would give two each and
+		// leave 6 against 2; levelling should end up 4 against 4.
+		const result = assignTeamsLevellingGroups([group('a', ['x1', 'x2', 'x3', 'x4']), group('b')], ['t1', 't2', 't3', 't4']);
+
+		expect(sizes(result)).toEqual([4, 4]);
+	});
+
+	it('spreads an exact multiple evenly', () => {
+		const result = assignTeamsLevellingGroups([group('a'), group('b'), group('c')], ['t1', 't2', 't3', 't4', 't5', 't6']);
+
+		expect(sizes(result)).toEqual([2, 2, 2]);
+	});
+
+	it('never leaves group sizes more than one apart', () => {
+		const result = assignTeamsLevellingGroups(
+			[group('a', ['x1']), group('b'), group('c', ['x2', 'x3'])],
+			Array.from({ length: 11 }, (_, index) => `t${index}`)
+		);
+		const totals = sizes(result);
+
+		expect(Math.max(...totals) - Math.min(...totals)).toBeLessThanOrEqual(1);
+	});
+
+	it('does not add a team that is already assigned', () => {
+		const result = assignTeamsLevellingGroups([group('a', ['t1']), group('b')], ['t1', 't2']);
+
+		expect(result.flatMap((entry) => entry.assignedTeams).filter((id) => id === 't1')).toHaveLength(1);
+		expect(sizes(result)).toEqual([1, 1]);
+	});
+
+	it('returns the groups untouched when there is nothing to assign', () => {
+		const result = assignTeamsLevellingGroups([group('a', ['t1'])], []);
+
+		expect(result).toEqual([{ id: 'a', name: 'a', assignedTeams: ['t1'] }]);
+	});
+
+	it('does nothing when there are no groups', () => {
+		expect(assignTeamsLevellingGroups([], ['t1', 't2'])).toEqual([]);
+	});
+
+	it('does not mutate the groups it was given', () => {
+		const original = group('a', ['t1']);
+		assignTeamsLevellingGroups([original], ['t2']);
+
+		expect(original.assignedTeams).toEqual(['t1']);
+	});
+
+	it('breaks ties without always favouring the first group', () => {
+		// Two empty groups, one team. A random source pinned to the top of the range must
+		// choose the last tied group, which a naive "first smallest" would never do.
+		const result = assignTeamsLevellingGroups([group('a'), group('b')], ['t1'], sequence([0.999]));
+
+		expect(result[1]!.assignedTeams).toEqual(['t1']);
+	});
+});

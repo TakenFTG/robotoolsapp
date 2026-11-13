@@ -1,0 +1,66 @@
+# Dependencies
+node_modules/
+jspm_packages/
+
+# Build output
+dist/
+build/Release
+
+# Runtime data — the SQLite files this server owns. Never commit these.
+data/
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.pnpm-debug.log*
+
+# Diagnostic reports (https://nodejs.org/api/report.html)
+report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
+
+# Runtime pids
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage
+lib-cov
+coverage
+*.lcov
+.nyc_output
+
+# Caches
+.npm
+.eslintcache
+.stylelintcache
+.cache
+.temp
+*.tsbuildinfo
+
+# Environment
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Editors
+.vscode-test
+.tern-port
+.node_repl_history
+
+# Yarn
+.yarn-integrity
+.yarn/cache
+.yarn/unplugged
+.yarn/build-state.yml
+.yarn/install-state.gz
+.pnp.*
+
+# Leftover Cloudflare/miniflare local state. The worker no longer runs on Workers at all,
+# so this is dead weight — and it holds real dev judging data and access tokens.
+.wrangler/

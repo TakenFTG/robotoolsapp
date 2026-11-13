@@ -1,0 +1,48 @@
+{
+	"name": "@robotools.app/worker",
+	"version": "0.0.0",
+	"private": true,
+	"scripts": {
+		"dev": "node dev.mjs",
+		"start": "node dist/server.js",
+		"format": "prettier --write .",
+		"check": "tsc --noEmit",
+		"lint": "prettier --check . && eslint .",
+		"db:generate": "drizzle-kit generate --name migration",
+		"db:generate-group": "drizzle-kit generate --config drizzle-group.config.ts --name migration",
+		"db:generate-admin": "drizzle-kit generate --config drizzle-admin.config.ts --name migration",
+		"db:generate-ref": "drizzle-kit generate --config drizzle-ref.config.ts --name migration",
+		"test:unit": "vitest",
+		"test": "bun run test:unit -- --run",
+		"build": "esbuild src/main.ts --bundle --platform=node --target=node22 --format=esm --outfile=dist/server.js --external:better-sqlite3 --external:ws --external:nodemailer --banner:js=\"import{createRequire}from'module';const require=createRequire(import.meta.url);\""
+	},
+	"devDependencies": {
+		"@eslint/compat": "^2.1.0",
+		"@eslint/js": "^10.0.1",
+		"@types/better-sqlite3": "^9.6.0",
+		"@types/node": "^24.9.1",
+		"@types/nodemailer": "^8.0.1",
+		"@types/ws": "^8.18.1",
+		"drizzle-kit": "^0.31.10",
+		"esbuild": "^0.28.2",
+		"eslint": "^10.8.1",
+		"eslint-config-prettier": "^10.1.8",
+		"globals": "^17.6.0",
+		"prettier": "^3.9.6",
+		"typescript": "^6.0.3",
+		"typescript-eslint": "^8.67.0",
+		"vitest": "^4.1.10"
+	},
+	"dependencies": {
+		"@robotools.app/protocol": "workspace:*",
+		"@robotools.app/web": "workspace:*",
+		"@robotools.app/wrpc": "workspace:*",
+		"better-sqlite3": "^13.0.3",
+		"drizzle-orm": "^0.45.2",
+		"events.vex": "^7.0.1",
+		"nodemailer": "^8.0.10",
+		"ws": "^8.21.0",
+		"zod": "^4.4.3"
+	},
+	"type": "module"
+}

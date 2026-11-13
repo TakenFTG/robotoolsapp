@@ -1,0 +1,207 @@
+/*
+ * Tailwind's own palettes, pointed at Material 3 roles.
+ *
+ * About a thousand class names across the app use `text-gray-700`, `bg-red-50` and the
+ * like. Rather than rewrite them all, the palette variables behind those utilities are
+ * redefined here, so every existing screen takes on the M3 scheme — light and dark — with
+ * no change at the call site. Because only the variables change, hover, responsive and
+ * opacity variants (`hover:bg-gray-100`, `bg-gray-50/80`) keep working.
+ *
+ * Shades map by how the app uses them: 50–200 are fills, 300–400 borders, 500 and up text.
+ * Strong fills under `text-white` flip together with white (see below), so they stay
+ * readable in both themes.
+ *
+ * New code should use the role utilities (`bg-surface-container`, `text-on-surface`,
+ * `bg-primary`) from m3-theme.css instead.
+ */
+@theme inline {
+	/*
+	 * White is the lowest surface in light and near-black in dark. `text-white` on a
+	 * strong fill therefore becomes dark text on the (now light) fill in dark mode, which is
+	 * how M3's on-colours behave. `black` is left alone: it backs scrims and photos.
+	 */
+	--color-white: var(--md-sys-color-surface-container-lowest);
+
+	/* Neutrals: surfaces at the light end, text at the dark end. */
+	--color-gray-50: var(--md-sys-color-surface-container-low);
+	--color-gray-100: var(--md-sys-color-surface-container);
+	--color-gray-200: var(--md-sys-color-surface-container-high);
+	--color-gray-300: var(--md-sys-color-outline-variant);
+	--color-gray-400: color-mix(in srgb, var(--md-sys-color-outline) 70%, var(--md-sys-color-surface));
+	--color-gray-500: var(--md-sys-color-outline);
+	--color-gray-600: var(--md-sys-color-on-surface-variant);
+	--color-gray-700: color-mix(in srgb, var(--md-sys-color-on-surface-variant) 50%, var(--md-sys-color-on-surface));
+	--color-gray-800: color-mix(in srgb, var(--md-sys-color-on-surface) 80%, var(--md-sys-color-on-surface-variant));
+	--color-gray-900: var(--md-sys-color-on-surface);
+	--color-gray-950: var(--md-sys-color-on-surface);
+	--color-slate-50: var(--md-sys-color-surface-container-low);
+	--color-slate-100: var(--md-sys-color-surface-container);
+	--color-slate-200: var(--md-sys-color-surface-container-high);
+	--color-slate-300: var(--md-sys-color-outline-variant);
+	--color-slate-400: color-mix(in srgb, var(--md-sys-color-outline) 70%, var(--md-sys-color-surface));
+	--color-slate-500: var(--md-sys-color-outline);
+	--color-slate-600: var(--md-sys-color-on-surface-variant);
+	--color-slate-700: color-mix(in srgb, var(--md-sys-color-on-surface-variant) 50%, var(--md-sys-color-on-surface));
+	--color-slate-800: color-mix(in srgb, var(--md-sys-color-on-surface) 80%, var(--md-sys-color-on-surface-variant));
+	--color-slate-900: var(--md-sys-color-on-surface);
+	--color-slate-950: var(--md-sys-color-on-surface);
+	--color-zinc-50: var(--md-sys-color-surface-container-low);
+	--color-zinc-100: var(--md-sys-color-surface-container);
+	--color-zinc-200: var(--md-sys-color-surface-container-high);
+	--color-zinc-300: var(--md-sys-color-outline-variant);
+	--color-zinc-400: color-mix(in srgb, var(--md-sys-color-outline) 70%, var(--md-sys-color-surface));
+	--color-zinc-500: var(--md-sys-color-outline);
+	--color-zinc-600: var(--md-sys-color-on-surface-variant);
+	--color-zinc-700: color-mix(in srgb, var(--md-sys-color-on-surface-variant) 50%, var(--md-sys-color-on-surface));
+	--color-zinc-800: color-mix(in srgb, var(--md-sys-color-on-surface) 80%, var(--md-sys-color-on-surface-variant));
+	--color-zinc-900: var(--md-sys-color-on-surface);
+	--color-zinc-950: var(--md-sys-color-on-surface);
+	--color-neutral-50: var(--md-sys-color-surface-container-low);
+	--color-neutral-100: var(--md-sys-color-surface-container);
+	--color-neutral-200: var(--md-sys-color-surface-container-high);
+	--color-neutral-300: var(--md-sys-color-outline-variant);
+	--color-neutral-400: color-mix(in srgb, var(--md-sys-color-outline) 70%, var(--md-sys-color-surface));
+	--color-neutral-500: var(--md-sys-color-outline);
+	--color-neutral-600: var(--md-sys-color-on-surface-variant);
+	--color-neutral-700: color-mix(in srgb, var(--md-sys-color-on-surface-variant) 50%, var(--md-sys-color-on-surface));
+	--color-neutral-800: color-mix(in srgb, var(--md-sys-color-on-surface) 80%, var(--md-sys-color-on-surface-variant));
+	--color-neutral-900: var(--md-sys-color-on-surface);
+	--color-neutral-950: var(--md-sys-color-on-surface);
+	/* Blue: links, focus, selection → primary. */
+	--color-blue-50: color-mix(in srgb, var(--md-sys-color-primary) 8%, var(--md-sys-color-surface-container-lowest));
+	--color-blue-100: color-mix(in srgb, var(--md-sys-color-primary) 14%, var(--md-sys-color-surface-container-lowest));
+	--color-blue-200: color-mix(in srgb, var(--md-sys-color-primary) 22%, var(--md-sys-color-surface-container-lowest));
+	--color-blue-300: color-mix(in srgb, var(--md-sys-color-primary) 36%, var(--md-sys-color-surface-container-lowest));
+	--color-blue-400: color-mix(in srgb, var(--md-sys-color-primary) 60%, var(--md-sys-color-surface-container-lowest));
+	--color-blue-500: var(--md-sys-color-primary);
+	--color-blue-600: var(--md-sys-color-primary);
+	--color-blue-700: var(--md-sys-color-primary);
+	--color-blue-800: color-mix(in srgb, var(--md-sys-color-primary) 75%, var(--md-sys-color-on-surface));
+	--color-blue-900: color-mix(in srgb, var(--md-sys-color-primary) 60%, var(--md-sys-color-on-surface));
+	--color-blue-950: color-mix(in srgb, var(--md-sys-color-primary) 50%, var(--md-sys-color-on-surface));
+	--color-sky-50: color-mix(in srgb, var(--md-sys-color-primary) 8%, var(--md-sys-color-surface-container-lowest));
+	--color-sky-100: color-mix(in srgb, var(--md-sys-color-primary) 14%, var(--md-sys-color-surface-container-lowest));
+	--color-sky-200: color-mix(in srgb, var(--md-sys-color-primary) 22%, var(--md-sys-color-surface-container-lowest));
+	--color-sky-300: color-mix(in srgb, var(--md-sys-color-primary) 36%, var(--md-sys-color-surface-container-lowest));
+	--color-sky-400: color-mix(in srgb, var(--md-sys-color-primary) 60%, var(--md-sys-color-surface-container-lowest));
+	--color-sky-500: var(--md-sys-color-primary);
+	--color-sky-600: var(--md-sys-color-primary);
+	--color-sky-700: var(--md-sys-color-primary);
+	--color-sky-800: color-mix(in srgb, var(--md-sys-color-primary) 75%, var(--md-sys-color-on-surface));
+	--color-sky-900: color-mix(in srgb, var(--md-sys-color-primary) 60%, var(--md-sys-color-on-surface));
+	--color-sky-950: color-mix(in srgb, var(--md-sys-color-primary) 50%, var(--md-sys-color-on-surface));
+	/* Red: absent, destructive, errors → error. */
+	--color-red-50: color-mix(in srgb, var(--md-sys-color-error) 8%, var(--md-sys-color-surface-container-lowest));
+	--color-red-100: color-mix(in srgb, var(--md-sys-color-error) 14%, var(--md-sys-color-surface-container-lowest));
+	--color-red-200: color-mix(in srgb, var(--md-sys-color-error) 22%, var(--md-sys-color-surface-container-lowest));
+	--color-red-300: color-mix(in srgb, var(--md-sys-color-error) 36%, var(--md-sys-color-surface-container-lowest));
+	--color-red-400: color-mix(in srgb, var(--md-sys-color-error) 60%, var(--md-sys-color-surface-container-lowest));
+	--color-red-500: var(--md-sys-color-error);
+	--color-red-600: var(--md-sys-color-error);
+	--color-red-700: var(--md-sys-color-error);
+	--color-red-800: color-mix(in srgb, var(--md-sys-color-error) 75%, var(--md-sys-color-on-surface));
+	--color-red-900: color-mix(in srgb, var(--md-sys-color-error) 60%, var(--md-sys-color-on-surface));
+	--color-red-950: color-mix(in srgb, var(--md-sys-color-error) 50%, var(--md-sys-color-on-surface));
+	--color-rose-50: color-mix(in srgb, var(--md-sys-color-error) 8%, var(--md-sys-color-surface-container-lowest));
+	--color-rose-100: color-mix(in srgb, var(--md-sys-color-error) 14%, var(--md-sys-color-surface-container-lowest));
+	--color-rose-200: color-mix(in srgb, var(--md-sys-color-error) 22%, var(--md-sys-color-surface-container-lowest));
+	--color-rose-300: color-mix(in srgb, var(--md-sys-color-error) 36%, var(--md-sys-color-surface-container-lowest));
+	--color-rose-400: color-mix(in srgb, var(--md-sys-color-error) 60%, var(--md-sys-color-surface-container-lowest));
+	--color-rose-500: var(--md-sys-color-error);
+	--color-rose-600: var(--md-sys-color-error);
+	--color-rose-700: var(--md-sys-color-error);
+	--color-rose-800: color-mix(in srgb, var(--md-sys-color-error) 75%, var(--md-sys-color-on-surface));
+	--color-rose-900: color-mix(in srgb, var(--md-sys-color-error) 60%, var(--md-sys-color-on-surface));
+	--color-rose-950: color-mix(in srgb, var(--md-sys-color-error) 50%, var(--md-sys-color-on-surface));
+	/* Green: present, confirmed → success. */
+	--color-green-50: color-mix(in srgb, var(--md-ext-color-success) 8%, var(--md-sys-color-surface-container-lowest));
+	--color-green-100: color-mix(in srgb, var(--md-ext-color-success) 14%, var(--md-sys-color-surface-container-lowest));
+	--color-green-200: color-mix(in srgb, var(--md-ext-color-success) 22%, var(--md-sys-color-surface-container-lowest));
+	--color-green-300: color-mix(in srgb, var(--md-ext-color-success) 36%, var(--md-sys-color-surface-container-lowest));
+	--color-green-400: color-mix(in srgb, var(--md-ext-color-success) 60%, var(--md-sys-color-surface-container-lowest));
+	--color-green-500: var(--md-ext-color-success);
+	--color-green-600: var(--md-ext-color-success);
+	--color-green-700: var(--md-ext-color-success);
+	--color-green-800: color-mix(in srgb, var(--md-ext-color-success) 75%, var(--md-sys-color-on-surface));
+	--color-green-900: color-mix(in srgb, var(--md-ext-color-success) 60%, var(--md-sys-color-on-surface));
+	--color-green-950: color-mix(in srgb, var(--md-ext-color-success) 50%, var(--md-sys-color-on-surface));
+	--color-emerald-50: color-mix(in srgb, var(--md-ext-color-success) 8%, var(--md-sys-color-surface-container-lowest));
+	--color-emerald-100: color-mix(in srgb, var(--md-ext-color-success) 14%, var(--md-sys-color-surface-container-lowest));
+	--color-emerald-200: color-mix(in srgb, var(--md-ext-color-success) 22%, var(--md-sys-color-surface-container-lowest));
+	--color-emerald-300: color-mix(in srgb, var(--md-ext-color-success) 36%, var(--md-sys-color-surface-container-lowest));
+	--color-emerald-400: color-mix(in srgb, var(--md-ext-color-success) 60%, var(--md-sys-color-surface-container-lowest));
+	--color-emerald-500: var(--md-ext-color-success);
+	--color-emerald-600: var(--md-ext-color-success);
+	--color-emerald-700: var(--md-ext-color-success);
+	--color-emerald-800: color-mix(in srgb, var(--md-ext-color-success) 75%, var(--md-sys-color-on-surface));
+	--color-emerald-900: color-mix(in srgb, var(--md-ext-color-success) 60%, var(--md-sys-color-on-surface));
+	--color-emerald-950: color-mix(in srgb, var(--md-ext-color-success) 50%, var(--md-sys-color-on-surface));
+	/* Yellow, amber, orange: warnings → warning. */
+	--color-yellow-50: color-mix(in srgb, var(--md-ext-color-warning) 8%, var(--md-sys-color-surface-container-lowest));
+	--color-yellow-100: color-mix(in srgb, var(--md-ext-color-warning) 14%, var(--md-sys-color-surface-container-lowest));
+	--color-yellow-200: color-mix(in srgb, var(--md-ext-color-warning) 22%, var(--md-sys-color-surface-container-lowest));
+	--color-yellow-300: color-mix(in srgb, var(--md-ext-color-warning) 36%, var(--md-sys-color-surface-container-lowest));
+	--color-yellow-400: color-mix(in srgb, var(--md-ext-color-warning) 60%, var(--md-sys-color-surface-container-lowest));
+	--color-yellow-500: var(--md-ext-color-warning);
+	--color-yellow-600: var(--md-ext-color-warning);
+	--color-yellow-700: var(--md-ext-color-warning);
+	--color-yellow-800: color-mix(in srgb, var(--md-ext-color-warning) 75%, var(--md-sys-color-on-surface));
+	--color-yellow-900: color-mix(in srgb, var(--md-ext-color-warning) 60%, var(--md-sys-color-on-surface));
+	--color-yellow-950: color-mix(in srgb, var(--md-ext-color-warning) 50%, var(--md-sys-color-on-surface));
+	--color-amber-50: color-mix(in srgb, var(--md-ext-color-warning) 8%, var(--md-sys-color-surface-container-lowest));
+	--color-amber-100: color-mix(in srgb, var(--md-ext-color-warning) 14%, var(--md-sys-color-surface-container-lowest));
+	--color-amber-200: color-mix(in srgb, var(--md-ext-color-warning) 22%, var(--md-sys-color-surface-container-lowest));
+	--color-amber-300: color-mix(in srgb, var(--md-ext-color-warning) 36%, var(--md-sys-color-surface-container-lowest));
+	--color-amber-400: color-mix(in srgb, var(--md-ext-color-warning) 60%, var(--md-sys-color-surface-container-lowest));
+	--color-amber-500: var(--md-ext-color-warning);
+	--color-amber-600: var(--md-ext-color-warning);
+	--color-amber-700: var(--md-ext-color-warning);
+	--color-amber-800: color-mix(in srgb, var(--md-ext-color-warning) 75%, var(--md-sys-color-on-surface));
+	--color-amber-900: color-mix(in srgb, var(--md-ext-color-warning) 60%, var(--md-sys-color-on-surface));
+	--color-amber-950: color-mix(in srgb, var(--md-ext-color-warning) 50%, var(--md-sys-color-on-surface));
+	--color-orange-50: color-mix(in srgb, var(--md-ext-color-warning) 8%, var(--md-sys-color-surface-container-lowest));
+	--color-orange-100: color-mix(in srgb, var(--md-ext-color-warning) 14%, var(--md-sys-color-surface-container-lowest));
+	--color-orange-200: color-mix(in srgb, var(--md-ext-color-warning) 22%, var(--md-sys-color-surface-container-lowest));
+	--color-orange-300: color-mix(in srgb, var(--md-ext-color-warning) 36%, var(--md-sys-color-surface-container-lowest));
+	--color-orange-400: color-mix(in srgb, var(--md-ext-color-warning) 60%, var(--md-sys-color-surface-container-lowest));
+	--color-orange-500: var(--md-ext-color-warning);
+	--color-orange-600: var(--md-ext-color-warning);
+	--color-orange-700: var(--md-ext-color-warning);
+	--color-orange-800: color-mix(in srgb, var(--md-ext-color-warning) 75%, var(--md-sys-color-on-surface));
+	--color-orange-900: color-mix(in srgb, var(--md-ext-color-warning) 60%, var(--md-sys-color-on-surface));
+	--color-orange-950: color-mix(in srgb, var(--md-ext-color-warning) 50%, var(--md-sys-color-on-surface));
+	/* Indigo: event group markers → secondary. */
+	--color-indigo-50: color-mix(in srgb, var(--md-sys-color-secondary) 8%, var(--md-sys-color-surface-container-lowest));
+	--color-indigo-100: color-mix(in srgb, var(--md-sys-color-secondary) 14%, var(--md-sys-color-surface-container-lowest));
+	--color-indigo-200: color-mix(in srgb, var(--md-sys-color-secondary) 22%, var(--md-sys-color-surface-container-lowest));
+	--color-indigo-300: color-mix(in srgb, var(--md-sys-color-secondary) 36%, var(--md-sys-color-surface-container-lowest));
+	--color-indigo-400: color-mix(in srgb, var(--md-sys-color-secondary) 60%, var(--md-sys-color-surface-container-lowest));
+	--color-indigo-500: var(--md-sys-color-secondary);
+	--color-indigo-600: var(--md-sys-color-secondary);
+	--color-indigo-700: var(--md-sys-color-secondary);
+	--color-indigo-800: color-mix(in srgb, var(--md-sys-color-secondary) 75%, var(--md-sys-color-on-surface));
+	--color-indigo-900: color-mix(in srgb, var(--md-sys-color-secondary) 60%, var(--md-sys-color-on-surface));
+	--color-indigo-950: color-mix(in srgb, var(--md-sys-color-secondary) 50%, var(--md-sys-color-on-surface));
+	--color-violet-50: color-mix(in srgb, var(--md-sys-color-secondary) 8%, var(--md-sys-color-surface-container-lowest));
+	--color-violet-100: color-mix(in srgb, var(--md-sys-color-secondary) 14%, var(--md-sys-color-surface-container-lowest));
+	--color-violet-200: color-mix(in srgb, var(--md-sys-color-secondary) 22%, var(--md-sys-color-surface-container-lowest));
+	--color-violet-300: color-mix(in srgb, var(--md-sys-color-secondary) 36%, var(--md-sys-color-surface-container-lowest));
+	--color-violet-400: color-mix(in srgb, var(--md-sys-color-secondary) 60%, var(--md-sys-color-surface-container-lowest));
+	--color-violet-500: var(--md-sys-color-secondary);
+	--color-violet-600: var(--md-sys-color-secondary);
+	--color-violet-700: var(--md-sys-color-secondary);
+	--color-violet-800: color-mix(in srgb, var(--md-sys-color-secondary) 75%, var(--md-sys-color-on-surface));
+	--color-violet-900: color-mix(in srgb, var(--md-sys-color-secondary) 60%, var(--md-sys-color-on-surface));
+	--color-violet-950: color-mix(in srgb, var(--md-sys-color-secondary) 50%, var(--md-sys-color-on-surface));
+	--color-purple-50: color-mix(in srgb, var(--md-sys-color-secondary) 8%, var(--md-sys-color-surface-container-lowest));
+	--color-purple-100: color-mix(in srgb, var(--md-sys-color-secondary) 14%, var(--md-sys-color-surface-container-lowest));
+	--color-purple-200: color-mix(in srgb, var(--md-sys-color-secondary) 22%, var(--md-sys-color-surface-container-lowest));
+	--color-purple-300: color-mix(in srgb, var(--md-sys-color-secondary) 36%, var(--md-sys-color-surface-container-lowest));
+	--color-purple-400: color-mix(in srgb, var(--md-sys-color-secondary) 60%, var(--md-sys-color-surface-container-lowest));
+	--color-purple-500: var(--md-sys-color-secondary);
+	--color-purple-600: var(--md-sys-color-secondary);
+	--color-purple-700: var(--md-sys-color-secondary);
+	--color-purple-800: color-mix(in srgb, var(--md-sys-color-secondary) 75%, var(--md-sys-color-on-surface));
+	--color-purple-900: color-mix(in srgb, var(--md-sys-color-secondary) 60%, var(--md-sys-color-on-surface));
+	--color-purple-950: color-mix(in srgb, var(--md-sys-color-secondary) 50%, var(--md-sys-color-on-surface));
+}

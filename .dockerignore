@@ -1,0 +1,29 @@
+# Build artefacts and installed trees — the image builds its own.
+node_modules
+**/node_modules
+**/build
+**/dist
+**/.svelte-kit
+
+# Live data must never end up baked into an image.
+data
+**/data
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+
+# Secrets. The example file is documentation and carries no values, but a filled-in
+# judging.env must never reach the build context.
+.env
+.env.*
+*.env
+!*.env.example
+
+.git
+.gitlab-ci.yml
+.github
+.vscode
+.cursor
+docs
+*.md
+!README.md

@@ -1,0 +1,1 @@
+ALTER TABLE `GroupAdvisors` ADD `email` text;

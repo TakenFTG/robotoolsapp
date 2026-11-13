@@ -1,0 +1,304 @@
+import type { EssentialData } from '@robotools.app/protocol/src/event';
+import { EssentialDataSchema } from '@robotools.app/protocol/src/event';
+import { awards, judgeGroups, judgeGroupsAssignedTeams, metadata, teams } from '../db/schema';
+import type { DatabaseOrTransaction, ServerContext } from '../server-router';
+import type { Award, AwardType } from '@robotools.app/protocol/src/award';
+import { eq, getTableColumns, sql, SQL } from 'drizzle-orm';
+import type { TeamInfo } from '@robotools.app/protocol/src/team';
+import type { JudgeGroup } from '@robotools.app/protocol/src/judging';
+import type { SQLiteInsertValue, SQLiteTable } from 'drizzle-orm/sqlite-core';
+import type { ClientRouter } from '../client-router';
+import type { WRPCRootObject } from '@robotools.app/wrpc/server';
+import { transaction } from '../utils';
+import { getFinalAwardNominations } from './judging';
+import { getTeamData } from './team';
+import { getJudges } from './judge';
+import { JUDGE_ADVISOR_SINGLETON_ID, generateAuthToken, uncontrolledAuthentication } from '@robotools.app/protocol/src/access';
+import { assertAuthenticatedJudgeAdvisor, upsertJudgeAdvisorAuthToken } from '../access/tokens';
+import { getRoomGroupId } from '../group/gateway';
+import { WRPCError } from '@robotools.app/wrpc/server/types';
+import type { RoomState } from './handshake';
+import { broadcastDeviceListUpdate } from './device';
+import { syncRoomRegistration } from '../admin/register';
+import { notifyAuthenticationChange } from './notify';
+
+export async function getAwards(db: DatabaseOrTransaction, type?: AwardType): Promise<Award[]> {
+	// JERRY: explicit type definition is needed to cast acceptedGrades from unknown to AwardType[]
+	if (type) {
+		return db.select().from(awards).where(eq(awards.type, type)).orderBy(awards.position) as Promise<Award[]>;
+	}
+	return db.select().from(awards).orderBy(awards.position) as Promise<Award[]>;
+}
+
+export async function getTeamInfos(db: DatabaseOrTransaction, group?: string): Promise<TeamInfo[]> {
+	const neededColumns = {
+		id: teams.id,
+		number: teams.number,
+		name: teams.name,
+		city: teams.city,
+		state: teams.state,
+		country: teams.country,
+		shortName: teams.shortName,
+		school: teams.school,
+		grade: teams.grade,
+		group: teams.group
+	};
+	if (group) {
+		return db.select(neededColumns).from(teams).where(eq(teams.group, group));
+	} else {
+		return db.select(neededColumns).from(teams);
+	}
+}
+
+export async function getJudgeGroups(db: DatabaseOrTransaction): Promise<JudgeGroup[]> {
+	const rows = await db
+		.select({ id: judgeGroups.id, name: judgeGroups.name, teamId: teams.id, order: judgeGroupsAssignedTeams.order })
+		.from(judgeGroups)
+		.leftJoin(judgeGroupsAssignedTeams, eq(judgeGroupsAssignedTeams.judgeGroupId, judgeGroups.id))
+		.leftJoin(teams, eq(teams.id, judgeGroupsAssignedTeams.teamId))
+		.orderBy(judgeGroupsAssignedTeams.order);
+
+	const groupsMap = new Map<string, JudgeGroup>();
+	for (const row of rows) {
+		let group = groupsMap.get(row.id);
+		if (!group) {
+			group = { id: row.id, name: row.name, assignedTeams: [] };
+			groupsMap.set(row.id, group);
+		}
+		if (row.teamId) {
+			group.assignedTeams.push(row.teamId);
+		}
+	}
+	return Array.from(groupsMap.values());
+}
+
+export async function hasEssentialData(db: DatabaseOrTransaction): Promise<boolean> {
+	const metadataRows = await db.select().from(metadata).limit(1);
+	return metadataRows.length > 0;
+}
+
+export async function getEssentialData(db: DatabaseOrTransaction): Promise<EssentialData> {
+	return transaction(db, async (tx) => {
+		const metadataRows = await tx.select().from(metadata).limit(1);
+		if (metadataRows.length === 0) {
+			throw new Error('No metadata found');
+		}
+
+		return {
+			robotEventsSku: metadataRows[0].robotEventsSku,
+			robotEventsEventId: metadataRows[0].robotEventsEventId,
+			divisionId: metadataRows[0].divisionId,
+			eventName: metadataRows[0].eventName,
+			program: metadataRows[0].program,
+			eventGradeLevel: metadataRows[0].eventGradeLevel,
+			judgingMethod: metadataRows[0].judgingMethod,
+			judgingStep: metadataRows[0].judgingStep,
+			accessControlEnabled: metadataRows[0].accessControlEnabled,
+			awards: await getAwards(tx),
+			teamInfos: await getTeamInfos(tx),
+			judgeGroups: await getJudgeGroups(tx)
+		};
+	});
+}
+
+export async function updateEssentialData(db: DatabaseOrTransaction, essentialData: EssentialData): Promise<void> {
+	const buildConflictUpdateColumns = <T extends SQLiteTable, Q extends keyof T['_']['columns']>(table: T, columns: Q[]) => {
+		const cls = getTableColumns(table);
+		return columns.reduce(
+			(acc, column) => {
+				const colName = cls[column].name;
+				acc[column] = sql.raw(`excluded.${colName}`);
+				return acc;
+			},
+			{} as Record<Q, SQL>
+		);
+	};
+
+	async function updateInsertAndDeleteAwards(tx: DatabaseOrTransaction, values: Award[]) {
+		type AwardInDB = SQLiteInsertValue<typeof awards>;
+
+		const valuesInDB = values.map((v, i) => ({ ...v, position: i }));
+
+		// Use for loop instead of bulk insert/delete to avoid SQLite error
+		// See: https://github.com/drizzle-team/drizzle-orm/issues/2479
+		const allAwards = await tx.select().from(awards);
+		for (const v of allAwards) {
+			if (!valuesInDB.some((v2) => v2.name === v.name)) {
+				await tx.delete(awards).where(eq(awards.name, v.name));
+			}
+		}
+
+		for (const v of valuesInDB) {
+			await tx
+				.insert(awards)
+				.values(v)
+				.onConflictDoUpdate({
+					target: [awards.name],
+					set: buildConflictUpdateColumns(awards, Object.keys(v) as (keyof AwardInDB)[])
+				});
+		}
+	}
+
+	async function updateInsertAndDeleteTeams(tx: DatabaseOrTransaction, values: TeamInfo[]) {
+		// Use for loop instead of bulk insert/delete to avoid SQLite error
+		// See: https://github.com/drizzle-team/drizzle-orm/issues/2479
+		const allTeams = await tx.select().from(teams);
+		for (const v of allTeams) {
+			if (!values.some((v2) => v2.id === v.id)) {
+				await tx.delete(teams).where(eq(teams.id, v.id));
+			}
+		}
+
+		for (const v of values) {
+			await tx
+				.insert(teams)
+				.values(v)
+				.onConflictDoUpdate({
+					target: [teams.id],
+					set: buildConflictUpdateColumns(teams, Object.keys(v) as (keyof TeamInfo)[])
+				});
+		}
+	}
+
+	async function updateInsertAndDeleteJudgeGroups(tx: DatabaseOrTransaction, values: JudgeGroup[]) {
+		// Use for loop instead of bulk insert/delete to avoid SQLite error
+		// See: https://github.com/drizzle-team/drizzle-orm/issues/2479
+		const allJudgeGroups = await tx.select().from(judgeGroups);
+		for (const v of allJudgeGroups) {
+			if (!values.some((v2) => v2.id === v.id)) {
+				await tx.delete(judgeGroups).where(eq(judgeGroups.id, v.id));
+			}
+		}
+
+		for (const v of values) {
+			await tx
+				.insert(judgeGroups)
+				.values(v)
+				.onConflictDoUpdate({
+					target: [judgeGroups.id],
+					set: buildConflictUpdateColumns(judgeGroups, ['id', 'name'])
+				});
+		}
+
+		const assignedTeams = values.flatMap((v) => v.assignedTeams.map((t) => ({ judgeGroupId: v.id, teamId: t })));
+
+		await tx.delete(judgeGroupsAssignedTeams);
+
+		// for (const v of assignedTeams) {
+		// 	await tx.insert(judgeGroupsAssignedTeams).values(v);
+		// }
+		for (let i = 0; i < assignedTeams.length; i++) {
+			await tx.insert(judgeGroupsAssignedTeams).values({ ...assignedTeams[i], order: i });
+		}
+	}
+
+	// DISCUSS: Should we update cache?
+
+	return transaction(db, async (tx) => {
+		// Metadata is replaced wholesale from EssentialData, which the client owns and which
+		// deliberately knows nothing about groups, ref links or retention. Read those first and
+		// put them back, or every trip through event setup would quietly detach the room from
+		// its group and its referee notes, and reset its retention clock.
+		const [existing] = await tx
+			.select({
+				groupId: metadata.groupId,
+				retentionWarningSentAt: metadata.retentionWarningSentAt,
+				lastActivityAt: metadata.lastActivityAt,
+				linkedRefRoomId: metadata.linkedRefRoomId,
+				linkedRefEventName: metadata.linkedRefEventName
+			})
+			.from(metadata)
+			.limit(1);
+
+		await tx.delete(metadata);
+		await tx.insert(metadata).values({
+			...essentialData,
+			groupId: existing?.groupId ?? null,
+			retentionWarningSentAt: existing?.retentionWarningSentAt ?? null,
+			lastActivityAt: existing?.lastActivityAt ?? null,
+			linkedRefRoomId: existing?.linkedRefRoomId ?? null,
+			linkedRefEventName: existing?.linkedRefEventName ?? null
+		});
+		await updateInsertAndDeleteAwards(tx, essentialData.awards);
+		await updateInsertAndDeleteTeams(tx, essentialData.teamInfos);
+		await updateInsertAndDeleteJudgeGroups(tx, essentialData.judgeGroups);
+	});
+}
+
+export function buildEssentialRoute(w: WRPCRootObject<object, ServerContext, Record<string, never>>) {
+	return {
+		updateEssentialData: w.procedure.input(EssentialDataSchema).mutation(async ({ ctx, input, session }) => {
+			const wasAccessControlEnabled = await ctx.network.isAccessControlEnabled();
+			if (wasAccessControlEnabled) {
+				assertAuthenticatedJudgeAdvisor(ctx.auth);
+			}
+
+			if (wasAccessControlEnabled !== input.accessControlEnabled) {
+				if (input.accessControlEnabled) {
+					// The room is protected by links alone: every person holds their own, it is
+					// emailed rather than read aloud, and it can be rotated for one person
+					// without disturbing anyone else.
+					const authentication = {
+						isAccessControlled: true as const,
+						authToken: generateAuthToken(),
+						role: 'judge_advisor' as const,
+						judgeAdvisorId: JUDGE_ADVISOR_SINGLETON_ID
+					};
+
+					// Client ACK first — if this fails, leave AC flag and attachment unchanged.
+					notifyAuthenticationChange(session.getClient<ClientRouter>(session.currentClient.clientId), authentication);
+
+					await upsertJudgeAdvisorAuthToken(ctx.db, authentication.authToken);
+					ctx.auth.setAuthentication(authentication);
+				} else {
+					// SAFETY: a room in an event group is opened by group credentials. Turning
+					// access control off would make it open to anyone while it still appears
+					// in the group's division list — a room the group cannot actually protect.
+					// Leaving the group is the deliberate step that makes this safe.
+					if (await getRoomGroupId(ctx.db)) {
+						throw new WRPCError('Remove this division from its event group before turning off access control');
+					}
+
+					const authentication = uncontrolledAuthentication;
+
+					// Client ACK first — if this fails, leave AC flag and attachment unchanged.
+					notifyAuthenticationChange(session.getClient<ClientRouter>(session.currentClient.clientId), authentication);
+
+					ctx.auth.setAuthentication(authentication);
+				}
+
+				// SAFETY: Must kick every other client when AC toggles.
+				// With AC on, authorizeConnect only accepts controlled attachments, and DO
+				// single-concurrency means no reconnect can slip in before the flag is written
+				// below. Mutations then trust that uncontrolled sockets cannot exist while AC
+				// is on (no per-mutation requireAuthenticated). Do not remove or narrow this kick.
+				await ctx.network.kickOtherClients(session.currentClient.clientId);
+				// Always broadcast: already-offline kicks do not get a webSocketClose update.
+				broadcastDeviceListUpdate(ctx, session);
+			}
+
+			await updateEssentialData(ctx.db, input);
+
+			// An event renamed mid-weekend should not stay listed under its old name.
+			await syncRoomRegistration(ctx);
+
+			// Teams may have changed; a linked ref room shows this division's list.
+			const [link] = await ctx.db.select({ refRoomId: metadata.linkedRefRoomId }).from(metadata).limit(1);
+			if (link?.refRoomId) {
+				ctx.refLink.teamsChanged(link.refRoomId);
+			}
+
+			// Do not wait for the broadcast to complete
+			transaction(ctx.db, async (tx) => {
+				return {
+					essentialData: await getEssentialData(tx),
+					teamData: await getTeamData(tx),
+					judges: await getJudges(tx),
+					finalAwardNominations: await getFinalAwardNominations(tx)
+				} satisfies RoomState;
+			}).then((message) => {
+				session.broadcast<ClientRouter>().onEventSetupUpdate.mutation(message);
+			});
+		})
+	};
+}

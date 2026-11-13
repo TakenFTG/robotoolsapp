@@ -1,0 +1,28 @@
+{
+  "name": "@robotools.app/protocol",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "format": "prettier --write .",
+    "check": "tsc --noEmit",
+    "lint": "prettier --check . && eslint .",
+    "test:unit": "vitest",
+    "test": "bun run test:unit -- --run"
+  },
+  "devDependencies": {
+    "@eslint/compat": "^2.1.0",
+    "@types/node": "^24.9.1",
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.8.1",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.9.6",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.67.0",
+    "vitest": "^4.1.10"
+  },
+  "dependencies": {
+    "uuid": "^14.0.1",
+    "zod": "^4.4.3"
+  }
+}

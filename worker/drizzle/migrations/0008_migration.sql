@@ -1,0 +1,1 @@
+ALTER TABLE `Metadata` ADD `groupId` text;

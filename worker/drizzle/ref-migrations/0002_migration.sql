@@ -1,0 +1,1 @@
+ALTER TABLE `Incidents` ADD `authorJudgesRoomId` text;

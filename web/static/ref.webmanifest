@@ -1,0 +1,22 @@
+{
+  "id": "/ref",
+  "name": "Robo Tools Referee Notes",
+  "short_name": "Ref Notes",
+  "start_url": "/ref",
+  "scope": "/ref",
+  "icons": [
+    {
+      "src": "/ref-android-chrome-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/ref-android-chrome-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ],
+  "theme_color": "#ebeef5",
+  "background_color": "#f8f9ff",
+  "display": "standalone"
+}

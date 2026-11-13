@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="%paraglide.lang%">
+	<head>
+		<meta charset="utf-8" />
+		<link rel="icon" type="image/png" sizes="32x32" href="%sveltekit.assets%/favicon-32x32.png" />
+		<link rel="icon" type="image/png" sizes="16x16" href="%sveltekit.assets%/favicon-16x16.png" />
+		<!-- The install manifest and home-screen icon are set per side in +layout.svelte. -->
+		<meta name="description" content="Judging and referee tools for VEX Robotics Competitions." />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<!-- Browser chrome matches the M3 top app bar (surface-container). -->
+		<meta name="theme-color" content="#ebeef5" media="(prefers-color-scheme: light)" />
+		<meta name="theme-color" content="#1c2025" media="(prefers-color-scheme: dark)" />
+		<script>
+			// Applied before first paint. Without this, someone who chose dark gets a white
+			// flash on every load while the app boots and decides. Deliberately duplicates
+			// the logic in src/lib/theme.svelte.ts — it has to run before any module does.
+			(function () {
+				try {
+					var stored = JSON.parse(localStorage.getItem('preferences') || '{}');
+					var preference = stored.theme === 'light' || stored.theme === 'dark' ? stored.theme : 'system';
+					var dark = preference === 'dark' || (preference === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+					if (dark) document.documentElement.classList.add('dark');
+				} catch (e) {
+					// Storage unavailable, or malformed. Light is a safe default.
+				}
+			})();
+		</script>
+		%sveltekit.head%
+	</head>
+	<body data-sveltekit-preload-data="hover">
+		<div style="display: contents">%sveltekit.body%</div>
+	</body>
+</html>

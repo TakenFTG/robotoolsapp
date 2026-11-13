@@ -1,0 +1,141 @@
+/*
+ * Material 3 as Tailwind theme values: colour roles, type scale, shape and elevation.
+ *
+ * Colours come from m3-tokens.css (generated). Everything here is a utility name:
+ * `bg-primary`, `text-on-surface-variant`, `border-outline-variant`, `text-title-large`,
+ * `rounded-2xl`, `shadow-elev-2`.
+ */
+@theme inline {
+	--font-sans: 'Roboto Flex Variable', 'Roboto', ui-sans-serif, system-ui, sans-serif;
+
+	/* Colour roles */
+	--color-primary: var(--md-sys-color-primary);
+	--color-on-primary: var(--md-sys-color-on-primary);
+	--color-primary-container: var(--md-sys-color-primary-container);
+	--color-on-primary-container: var(--md-sys-color-on-primary-container);
+	--color-inverse-primary: var(--md-sys-color-inverse-primary);
+	--color-secondary: var(--md-sys-color-secondary);
+	--color-on-secondary: var(--md-sys-color-on-secondary);
+	--color-secondary-container: var(--md-sys-color-secondary-container);
+	--color-on-secondary-container: var(--md-sys-color-on-secondary-container);
+	--color-tertiary: var(--md-sys-color-tertiary);
+	--color-on-tertiary: var(--md-sys-color-on-tertiary);
+	--color-tertiary-container: var(--md-sys-color-tertiary-container);
+	--color-on-tertiary-container: var(--md-sys-color-on-tertiary-container);
+	--color-error: var(--md-sys-color-error);
+	--color-on-error: var(--md-sys-color-on-error);
+	--color-error-container: var(--md-sys-color-error-container);
+	--color-on-error-container: var(--md-sys-color-on-error-container);
+	--color-background: var(--md-sys-color-background);
+	--color-on-background: var(--md-sys-color-on-background);
+	--color-surface: var(--md-sys-color-surface);
+	--color-surface-dim: var(--md-sys-color-surface-dim);
+	--color-surface-bright: var(--md-sys-color-surface-bright);
+	--color-surface-container-lowest: var(--md-sys-color-surface-container-lowest);
+	--color-surface-container-low: var(--md-sys-color-surface-container-low);
+	--color-surface-container: var(--md-sys-color-surface-container);
+	--color-surface-container-high: var(--md-sys-color-surface-container-high);
+	--color-surface-container-highest: var(--md-sys-color-surface-container-highest);
+	--color-on-surface: var(--md-sys-color-on-surface);
+	--color-surface-variant: var(--md-sys-color-surface-variant);
+	--color-on-surface-variant: var(--md-sys-color-on-surface-variant);
+	--color-inverse-surface: var(--md-sys-color-inverse-surface);
+	--color-inverse-on-surface: var(--md-sys-color-inverse-on-surface);
+	--color-outline: var(--md-sys-color-outline);
+	--color-outline-variant: var(--md-sys-color-outline-variant);
+	--color-shadow: var(--md-sys-color-shadow);
+	--color-scrim: var(--md-sys-color-scrim);
+	--color-surface-tint: var(--md-sys-color-surface-tint);
+	--color-success: var(--md-ext-color-success);
+	--color-on-success: var(--md-ext-color-on-success);
+	--color-success-container: var(--md-ext-color-success-container);
+	--color-on-success-container: var(--md-ext-color-on-success-container);
+	--color-warning: var(--md-ext-color-warning);
+	--color-on-warning: var(--md-ext-color-on-warning);
+	--color-warning-container: var(--md-ext-color-warning-container);
+	--color-on-warning-container: var(--md-ext-color-on-warning-container);
+
+	/*
+	 * Shape. M3's scale is 4 / 8 / 12 / 16 / 28px; Tailwind's names are kept and moved onto
+	 * it, so existing `rounded-lg` cards become M3 medium:
+	 * extra-small = rounded-sm, small = rounded-md, medium = rounded-lg,
+	 * large = rounded-xl, extra-large = rounded-2xl, full = rounded-full.
+	 */
+	--radius-md: 0.5rem;
+	--radius-lg: 0.75rem;
+	--radius-xl: 1rem;
+	--radius-2xl: 1.75rem;
+
+	/* Elevation levels 1–5. Tailwind's sm/md/lg/xl shadows map onto 1–4. */
+	--shadow-elev-1: 0 1px 2px 0 rgb(0 0 0 / 0.3), 0 1px 3px 1px rgb(0 0 0 / 0.15);
+	--shadow-elev-2: 0 1px 2px 0 rgb(0 0 0 / 0.3), 0 2px 6px 2px rgb(0 0 0 / 0.15);
+	--shadow-elev-3: 0 1px 3px 0 rgb(0 0 0 / 0.3), 0 4px 8px 3px rgb(0 0 0 / 0.15);
+	--shadow-elev-4: 0 2px 3px 0 rgb(0 0 0 / 0.3), 0 6px 10px 4px rgb(0 0 0 / 0.15);
+	--shadow-elev-5: 0 4px 4px 0 rgb(0 0 0 / 0.3), 0 8px 12px 6px rgb(0 0 0 / 0.15);
+	--shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.3), 0 1px 3px 1px rgb(0 0 0 / 0.15);
+	--shadow-md: 0 1px 2px 0 rgb(0 0 0 / 0.3), 0 2px 6px 2px rgb(0 0 0 / 0.15);
+	--shadow-lg: 0 1px 3px 0 rgb(0 0 0 / 0.3), 0 4px 8px 3px rgb(0 0 0 / 0.15);
+	--shadow-xl: 0 2px 3px 0 rgb(0 0 0 / 0.3), 0 6px 10px 4px rgb(0 0 0 / 0.15);
+
+	/* Type scale: `text-display-large` … `text-label-small` set size, leading, weight, tracking. */
+	--text-display-large: 3.5625rem;
+	--text-display-large--line-height: 4rem;
+	--text-display-large--font-weight: 400;
+	--text-display-large--letter-spacing: -0.015625rem;
+	--text-display-medium: 2.8125rem;
+	--text-display-medium--line-height: 3.25rem;
+	--text-display-medium--font-weight: 400;
+	--text-display-medium--letter-spacing: 0;
+	--text-display-small: 2.25rem;
+	--text-display-small--line-height: 2.75rem;
+	--text-display-small--font-weight: 400;
+	--text-display-small--letter-spacing: 0;
+	--text-headline-large: 2rem;
+	--text-headline-large--line-height: 2.5rem;
+	--text-headline-large--font-weight: 400;
+	--text-headline-large--letter-spacing: 0;
+	--text-headline-medium: 1.75rem;
+	--text-headline-medium--line-height: 2.25rem;
+	--text-headline-medium--font-weight: 400;
+	--text-headline-medium--letter-spacing: 0;
+	--text-headline-small: 1.5rem;
+	--text-headline-small--line-height: 2rem;
+	--text-headline-small--font-weight: 400;
+	--text-headline-small--letter-spacing: 0;
+	--text-title-large: 1.375rem;
+	--text-title-large--line-height: 1.75rem;
+	--text-title-large--font-weight: 400;
+	--text-title-large--letter-spacing: 0;
+	--text-title-medium: 1rem;
+	--text-title-medium--line-height: 1.5rem;
+	--text-title-medium--font-weight: 500;
+	--text-title-medium--letter-spacing: 0.009375rem;
+	--text-title-small: 0.875rem;
+	--text-title-small--line-height: 1.25rem;
+	--text-title-small--font-weight: 500;
+	--text-title-small--letter-spacing: 0.00625rem;
+	--text-body-large: 1rem;
+	--text-body-large--line-height: 1.5rem;
+	--text-body-large--font-weight: 400;
+	--text-body-large--letter-spacing: 0.03125rem;
+	--text-body-medium: 0.875rem;
+	--text-body-medium--line-height: 1.25rem;
+	--text-body-medium--font-weight: 400;
+	--text-body-medium--letter-spacing: 0.015625rem;
+	--text-body-small: 0.75rem;
+	--text-body-small--line-height: 1rem;
+	--text-body-small--font-weight: 400;
+	--text-body-small--letter-spacing: 0.025rem;
+	--text-label-large: 0.875rem;
+	--text-label-large--line-height: 1.25rem;
+	--text-label-large--font-weight: 500;
+	--text-label-large--letter-spacing: 0.00625rem;
+	--text-label-medium: 0.75rem;
+	--text-label-medium--line-height: 1rem;
+	--text-label-medium--font-weight: 500;
+	--text-label-medium--letter-spacing: 0.03125rem;
+	--text-label-small: 0.6875rem;
+	--text-label-small--line-height: 1rem;
+	--text-label-small--font-weight: 500;
+	--text-label-small--letter-spacing: 0.03125rem;
+}

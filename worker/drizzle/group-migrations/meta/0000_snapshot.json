@@ -1,0 +1,209 @@
+{
+  "version": "6",
+  "dialect": "sqlite",
+  "id": "4c1f0d8e-3b7a-4a21-9f6c-2d5e8a91b30f",
+  "prevId": "00000000-0000-0000-0000-000000000000",
+  "tables": {
+    "GroupAdvisorUnlocks": {
+      "name": "GroupAdvisorUnlocks",
+      "columns": {
+        "groupAdvisorId": {
+          "name": "groupAdvisorId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "deviceId": {
+          "name": "deviceId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "expiresAt": {
+          "name": "expiresAt",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "GroupAdvisorUnlocks_groupAdvisorId_GroupAdvisors_id_fk": {
+          "name": "GroupAdvisorUnlocks_groupAdvisorId_GroupAdvisors_id_fk",
+          "tableFrom": "GroupAdvisorUnlocks",
+          "tableTo": "GroupAdvisors",
+          "columnsFrom": [
+            "groupAdvisorId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "GroupAdvisorUnlocks_groupAdvisorId_deviceId_pk": {
+          "columns": [
+            "groupAdvisorId",
+            "deviceId"
+          ],
+          "name": "GroupAdvisorUnlocks_groupAdvisorId_deviceId_pk"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "GroupAdvisors": {
+      "name": "GroupAdvisors",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'Judge Advisor'"
+        },
+        "authToken": {
+          "name": "authToken",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "pinHash": {
+          "name": "pinHash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "pinSalt": {
+          "name": "pinSalt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "pinIterations": {
+          "name": "pinIterations",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "pinFailedAttempts": {
+          "name": "pinFailedAttempts",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "pinLockedUntil": {
+          "name": "pinLockedUntil",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "group_advisors_authToken": {
+          "name": "group_advisors_authToken",
+          "columns": [
+            "authToken"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "GroupMetadata": {
+      "name": "GroupMetadata",
+      "columns": {
+        "groupId": {
+          "name": "groupId",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "GroupRooms": {
+      "name": "GroupRooms",
+      "columns": {
+        "roomId": {
+          "name": "roomId",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "label": {
+          "name": "label",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "position": {
+          "name": "position",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    }
+  },
+  "views": {},
+  "enums": {},
+  "_meta": {
+    "schemas": {},
+    "tables": {},
+    "columns": {}
+  },
+  "internal": {
+    "indexes": {}
+  }
+}
