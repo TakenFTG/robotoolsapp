@@ -144,6 +144,7 @@
 					rel="noopener noreferrer"
 					class="underline transition-colors hover:text-on-surface">{m.attribution_source_code()}</a
 				>
+				<br />{m.attribution_legal_notice()}
 			</p>
 		</div>
 	</div>

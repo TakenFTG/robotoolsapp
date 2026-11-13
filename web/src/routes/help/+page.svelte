@@ -455,6 +455,13 @@
 						<p>
 							See also <a href={resolve('/privacy')} class={linkClass}>Data Protection and Privacy</a>.
 						</p>
+						<p class="mt-2">
+							robotools.app is free software under the GPL v3.0:
+							<a href="https://github.com/TakenFTG/robotoolsapp" target="_blank" rel="noopener noreferrer" class={linkClass}>source code</a>
+							·
+							<!-- Generated into the build by web/third-party-licenses.ts, so it 404s under `bun run dev`. -->
+							<a href={asset('/third-party-licenses.txt')} target="_blank" rel="noopener" class={linkClass}>third-party licences</a>
+						</p>
 					</div>
 				</div>
 			</div>

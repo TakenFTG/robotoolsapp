@@ -672,6 +672,7 @@
 	"attribution_used_under": ", used under the",
 	"attribution_end": ".",
 	"attribution_source_code": "Source code",
+	"attribution_legal_notice": "© Jerrylum and robotools.app contributors. This is free software: you may share and change it under the GPL. It comes with no warranty.",
 	"access_link": "Access link",
 	"access_link_for": "Access link for {name}",
 	"access_link_dialog_description": "Give this to {name} only. Anyone holding it enters the room as them.",

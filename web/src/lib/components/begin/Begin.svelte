@@ -83,6 +83,7 @@
 			<a href="https://www.gnu.org/licenses/gpl-3.0.html" target="_blank" rel="noopener noreferrer">GNU General Public License v3.0</a
 			>{m.attribution_end()}
 			<a href="https://github.com/TakenFTG/robotoolsapp" target="_blank" rel="noopener noreferrer">{m.attribution_source_code()}</a>
+			<br />{m.attribution_legal_notice()}
 		</p>
 	</div>
 </div>
