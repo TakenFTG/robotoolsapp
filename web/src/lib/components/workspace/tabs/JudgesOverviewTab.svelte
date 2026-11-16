@@ -333,7 +333,7 @@
 				>
 					{#each unassignedZone.teams as team (team.id)}
 						<div animate:flip={{ duration: flipDurationMs }}>
-							<TeamPlate {team} showGrade={false} />
+							<TeamPlate {team} showGrade={false} showNotebook />
 						</div>
 					{/each}
 				</div>
@@ -419,7 +419,7 @@
 					>
 						{#each zone.teams as team (team.id)}
 							<div animate:flip={{ duration: flipDurationMs }}>
-								<TeamPlate {team} showGrade={false} />
+								<TeamPlate {team} showGrade={false} showNotebook />
 							</div>
 						{/each}
 					</div>

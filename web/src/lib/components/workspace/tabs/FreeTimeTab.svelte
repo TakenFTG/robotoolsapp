@@ -16,9 +16,11 @@
 	import { onMount } from 'svelte';
 
 	/**
-	 * Each team's next free window between its matches that is long enough for an
-	 * interview, so judges can pick a time when the team is not queuing or on a field. The
-	 * next one rather than the longest, because the longest is often too late in the day.
+	 * Each team's next few free windows between its matches that are long enough for an
+	 * interview, one card per team, so judges can pick a time when the team is not queuing
+	 * or on a field. The next ones rather than the longest, because the longest is often
+	 * too late in the day; more than one, so a judge who cannot make the first still has
+	 * somewhere to go.
 	 *
 	 * Who is listed follows how the event judges. With assigned judging a judge opens on
 	 * their own group's teams, because those are the interviews they have to fit in; they
@@ -37,7 +39,10 @@
 	let { tab }: Props = $props();
 	void tab;
 
-	type SortKey = 'team' | 'start' | 'end' | 'length';
+	type SortKey = 'start' | 'team';
+
+	/** How many upcoming windows each team's card shows. */
+	const WINDOWS_PER_TEAM = 3;
 
 	let matches = $state<MatchSummary[]>([]);
 	let loading = $state(false);
@@ -47,7 +52,6 @@
 	let loadedOnce = $state(false);
 	let mineOnly = $state(true);
 	let sortKey = $state<SortKey>('start');
-	let sortAscending = $state(true);
 
 	const MIN_LENGTH_CHOICES = [10, 15, 20, 30];
 	const MIN_LENGTH_STORAGE_KEY = 'freeTime.minLengthMinutes';
@@ -102,39 +106,23 @@
 		return days.some((day) => day !== days[0]);
 	});
 
-	const result = $derived(freeTime(matches, teamNumbers, { now, minLengthMs: minLengthMinutes * 60000 }));
+	const result = $derived(freeTime(matches, teamNumbers, { now, minLengthMs: minLengthMinutes * 60000, maxWindows: WINDOWS_PER_TEAM }));
+
+	const teamNameByNumber = $derived(new Map(Object.values(teams).map((team) => [team.number, team.name])));
 	const delayMinutes = $derived(Math.round(result.delayMs / 60000));
 
-	const rows = $derived.by(() => {
+	const cards = $derived.by(() => {
 		const list = teamNumbers.map((teamNumber) => ({ teamNumber, freeTime: result.teams.get(teamNumber) as TeamFreeTime }));
-		const direction = sortAscending ? 1 : -1;
 		const byTeam = (a: string, b: string) => a.localeCompare(b, undefined, { numeric: true });
 
 		return list.sort((a, b) => {
-			// Teams with no window always sit at the bottom, whichever way the column runs.
-			const aw = a.freeTime.status === 'window' ? a.freeTime.window : null;
-			const bw = b.freeTime.status === 'window' ? b.freeTime.window : null;
-			if (sortKey === 'team') return direction * byTeam(a.teamNumber, b.teamNumber);
-			if (!aw || !bw) return (aw ? -1 : bw ? 1 : 0) || byTeam(a.teamNumber, b.teamNumber);
-			const value = (w: typeof aw) => (sortKey === 'start' ? w.start : sortKey === 'end' ? w.end : w.end - w.start);
-			return direction * (value(aw) - value(bw)) || byTeam(a.teamNumber, b.teamNumber);
+			if (sortKey === 'team') return byTeam(a.teamNumber, b.teamNumber);
+			// Soonest first; teams with no window left sit at the end.
+			const as = a.freeTime.status === 'window' ? a.freeTime.windows[0].start : Infinity;
+			const bs = b.freeTime.status === 'window' ? b.freeTime.windows[0].start : Infinity;
+			return (as === bs ? 0 : as < bs ? -1 : 1) || byTeam(a.teamNumber, b.teamNumber);
 		});
 	});
-
-	function sortBy(key: SortKey) {
-		if (sortKey === key) {
-			sortAscending = !sortAscending;
-		} else {
-			sortKey = key;
-			// Longest first is the useful default for length; soonest first for everything else.
-			sortAscending = key !== 'length';
-		}
-	}
-
-	function ariaSort(key: SortKey): 'ascending' | 'descending' | 'none' {
-		if (sortKey !== key) return 'none';
-		return sortAscending ? 'ascending' : 'descending';
-	}
 
 	/** `background` is the once-a-minute reread: it leaves the Refresh button alone. */
 	async function load(force: boolean, background = false) {
@@ -188,15 +176,6 @@
 	}
 </script>
 
-{#snippet header(key: SortKey, label: string, alignRight = false)}
-	<th class="py-2 pr-3 font-semibold" class:text-right={alignRight} aria-sort={ariaSort(key)}>
-		<button type="button" class="inline-flex items-center gap-1 hover:text-gray-900" onclick={() => sortBy(key)}>
-			{label}
-			<span class="w-3 text-xs text-gray-400" aria-hidden="true">{sortKey === key ? (sortAscending ? '▲' : '▼') : ''}</span>
-		</button>
-	</th>
-{/snippet}
-
 <div class="flex h-full flex-col overflow-hidden p-4">
 	<div class="mb-3 flex shrink-0 flex-wrap items-center justify-between gap-3">
 		<div class="flex flex-wrap items-center gap-2">
@@ -210,6 +189,13 @@
 					{#each MIN_LENGTH_CHOICES as minutes (minutes)}
 						<option value={minutes}>{m.free_time_length_minutes({ minutes })}</option>
 					{/each}
+				</select>
+			</label>
+			<label class="flex items-center gap-2 text-sm text-gray-700">
+				{m.free_time_sort_label()}
+				<select class="rounded-md border border-gray-300 px-2 py-1 text-sm" bind:value={sortKey}>
+					<option value="start">{m.free_time_sort_soonest()}</option>
+					<option value="team">{m.free_time_sort_team()}</option>
 				</select>
 			</label>
 			{#if canFilterToMyTeams}
@@ -279,41 +265,46 @@
 			</p>
 		{/each}
 
-		{#if rows.length === 0}
+		{#if cards.length === 0}
 			<p class="text-sm text-gray-600">{m.free_time_none_for_my_teams()}</p>
 		{:else}
 			<div class="min-h-0 flex-1 overflow-auto">
-				<table class="w-full border-collapse text-sm">
-					<thead class="sticky top-0 bg-white">
-						<tr class="border-b border-gray-300 text-left">
-							{@render header('team', m.matches_column_team())}
-							{@render header('start', m.free_time_column_from())}
-							{@render header('end', m.free_time_column_until())}
-							{@render header('length', m.free_time_column_length(), true)}
-							<th class="py-2 font-semibold">{m.free_time_column_between()}</th>
-						</tr>
-					</thead>
-					<tbody>
-						{#each rows as row (row.teamNumber)}
-							<tr class="border-b border-gray-100" class:bg-amber-50={!filtered && isMine(row.teamNumber)}>
-								<td class="py-2 pr-3 font-medium whitespace-nowrap">{row.teamNumber}</td>
-								{#if row.freeTime.status === 'window'}
-									{@const window = row.freeTime.window}
-									<td class="py-2 pr-3 whitespace-nowrap">{window.start <= now ? m.free_time_now() : formatTime(window.start)}</td>
-									<td class="py-2 pr-3 whitespace-nowrap">{formatTime(window.end)}</td>
-									<td class="py-2 pr-3 text-right font-semibold whitespace-nowrap">{formatLength(window.end - window.start)}</td>
-									<td class="py-2 whitespace-nowrap text-gray-600">
-										{edgeLabel(window.from, true)} – {edgeLabel(window.until, false)}
-									</td>
-								{:else}
-									<td class="py-2 text-gray-400" colspan="4">
-										{row.freeTime.status === 'none_left' ? m.free_time_none_left({ minutes: minLengthMinutes }) : m.free_time_no_matches()}
-									</td>
-								{/if}
-							</tr>
-						{/each}
-					</tbody>
-				</table>
+				<ul class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+					{#each cards as card (card.teamNumber)}
+						<!-- In the all-teams view, the judge's own teams stand out. -->
+						<li
+							class="flex flex-col rounded-lg border bg-white p-3 shadow-sm"
+							class:border-amber-400={!filtered && isMine(card.teamNumber)}
+							class:border-gray-200={filtered || !isMine(card.teamNumber)}
+						>
+							<div class="mb-2 flex items-baseline gap-2">
+								<span class="font-semibold text-gray-900">{card.teamNumber}</span>
+								<span class="truncate text-xs text-gray-500">{teamNameByNumber.get(card.teamNumber) ?? ''}</span>
+							</div>
+							{#if card.freeTime.status === 'window'}
+								<ol class="space-y-1.5">
+									{#each card.freeTime.windows as window (window.start)}
+										<li class="rounded-md bg-gray-50 px-2 py-1.5">
+											<div class="flex items-baseline justify-between gap-2">
+												<span class="text-sm font-medium whitespace-nowrap text-gray-900">
+													{window.start <= now ? m.free_time_now() : formatTime(window.start)} – {formatTime(window.end)}
+												</span>
+												<span class="text-xs font-semibold whitespace-nowrap text-gray-700">{formatLength(window.end - window.start)}</span>
+											</div>
+											<div class="truncate text-xs text-gray-500">
+												{edgeLabel(window.from, true)} – {edgeLabel(window.until, false)}
+											</div>
+										</li>
+									{/each}
+								</ol>
+							{:else}
+								<p class="text-sm text-gray-400">
+									{card.freeTime.status === 'none_left' ? m.free_time_none_left({ minutes: minLengthMinutes }) : m.free_time_no_matches()}
+								</p>
+							{/if}
+						</li>
+					{/each}
+				</ul>
 			</div>
 		{/if}
 	{/if}

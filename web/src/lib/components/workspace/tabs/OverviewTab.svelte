@@ -37,6 +37,19 @@
 	const judgingStep = $derived(essentialData?.judgingStep || 'beginning');
 	const isAwardDeliberationStarted = $derived(judgingStep === 'award_deliberations');
 
+	// The judges sharing the current judge's group, so a judge can find their partners.
+	// Re-derived from the live judge list, so a Judge Advisor's roster edits show up here.
+	const myJudgeGroup = $derived(currentUser?.role === 'judge' ? app.getCurrentUserJudgeGroup() : null);
+	const myJudgePartners = $derived.by(() => {
+		const me = currentUser?.role === 'judge' ? currentUser.judge.id : null;
+		if (!me || !myJudgeGroup) return [];
+		return app
+			.getAllJudges()
+			.filter((j) => j.groupId === myJudgeGroup.id && j.id !== me)
+			.map((j) => j.name)
+			.sort((a, b) => a.localeCompare(b));
+	});
+
 	function addTeamInterviewTab() {
 		tabs.addOrReuseTab(new TeamInterviewRubricTab({ teamId: '' }));
 	}
@@ -141,8 +154,20 @@
 					</p>
 					<p>{m.division_colon()}{essentialData.divisionId ?? m.not_set()}</p>
 					<p>{m.teams_number_of_colon({ count: essentialData.teamInfos.length })}</p>
-					<p>{m.judge_groups_number_of_colon({ count: essentialData.judgeGroups.length })}</p>
-					<p>{m.judges_number_of_colon({ count: app.getJudgeCount() })}</p>
+					<!-- Group and judge totals are roster detail for the Judge Advisor; a judge only
+					     needs their own group and partners, shown below. -->
+					{#if isJudgeAdvisor}
+						<p>{m.judge_groups_number_of_colon({ count: essentialData.judgeGroups.length })}</p>
+						<p>{m.judges_number_of_colon({ count: app.getJudgeCount() })}</p>
+					{/if}
+					{#if myJudgeGroup}
+						<p>{m.your_judge_group_colon()}<span class="font-medium text-gray-700">{myJudgeGroup.name}</span></p>
+						<p>
+							{m.paired_with_colon()}{#if myJudgePartners.length > 0}<span class="font-medium text-gray-700"
+									>{myJudgePartners.join(', ')}</span
+								>{:else}{m.paired_with_no_one()}{/if}
+						</p>
+					{/if}
 				</div>
 			{/if}
 		</div>

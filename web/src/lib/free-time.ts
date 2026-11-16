@@ -1,11 +1,11 @@
 import type { MatchSummary } from '@robotools.app/protocol/src/matches';
 
 /**
- * Each team's next free window between its matches that is long enough for an interview.
+ * Each team's next free windows between its matches that are long enough for an interview.
  *
- * The next one rather than the longest: the longest is often late in the day, after the
+ * The next ones rather than the longest: the longest is often late in the day, after the
  * judges need to be done. So the answer is the first window, from now, of at least the
- * length the judge asked for.
+ * length the judge asked for, and as many after it as the caller wants to offer.
  *
  * RobotEvents gives a match one time — when it is scheduled, or when it started — and no
  * end. A team is not free right up to that moment and straight after it, though: it has
@@ -46,6 +46,8 @@ export interface FreeTimeOptions {
 	dayKey?: (time: number) => string;
 	/** The shortest window that counts. Defaults to DEFAULT_MIN_LENGTH_MS. */
 	minLengthMs?: number;
+	/** How many windows to return per team, soonest first. Defaults to 1. */
+	maxWindows?: number;
 }
 
 /** What opens or closes a window: one of the team's matches, the day's first or last match, or a schedule break. */
@@ -64,7 +66,8 @@ export interface ScheduleBreak {
 }
 
 export type TeamFreeTime =
-	| { status: 'window'; window: FreeWindow }
+	/** The team's next windows of the minimum length, soonest first; never empty. */
+	| { status: 'window'; windows: FreeWindow[] }
 	/** The team has timed matches, but no window of the minimum length is left after now. */
 	| { status: 'none_left' }
 	/** The team has no match with a time in the schedule. */
@@ -163,6 +166,7 @@ export function freeTime(matches: readonly MatchSummary[], teamNumbers: Iterable
 	const after = options.busyAfterMs ?? MATCH_BUSY_AFTER_MS;
 	const dayKey = options.dayKey ?? localDayKey;
 	const minLength = options.minLengthMs ?? DEFAULT_MIN_LENGTH_MS;
+	const maxWindows = Math.max(1, options.maxWindows ?? 1);
 	const { times, delayMs } = projectMatchTimes(matches, options);
 
 	// Each team's busy blocks by day, and every match time by day for the day spans and breaks.
@@ -212,13 +216,13 @@ export function freeTime(matches: readonly MatchSummary[], teamNumbers: Iterable
 			continue;
 		}
 
-		// The earliest window, from now, that is long enough. A window already under way
-		// counts if enough of it is left.
-		let best: FreeWindow | null = null;
+		// Every window, from now, that is long enough; the soonest are kept below. A window
+		// already under way counts if enough of it is left.
+		const found: FreeWindow[] = [];
 		const consider = (window: FreeWindow) => {
 			const start = Math.max(window.start, options.now);
 			if (window.end - start < minLength) return;
-			if (!best || start < best.start) best = { ...window, start };
+			found.push({ ...window, start });
 		};
 
 		for (const [day, blocks] of byDay) {
@@ -258,7 +262,8 @@ export function freeTime(matches: readonly MatchSummary[], teamNumbers: Iterable
 			}
 		}
 
-		teams.set(teamNumber, best ? { status: 'window', window: best } : { status: 'none_left' });
+		found.sort((a, b) => a.start - b.start);
+		teams.set(teamNumber, found.length > 0 ? { status: 'window', windows: found.slice(0, maxWindows) } : { status: 'none_left' });
 	}
 
 	const breaks = [...breaksByDay.values()]

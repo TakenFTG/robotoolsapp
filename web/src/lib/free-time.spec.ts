@@ -72,7 +72,7 @@ describe('free windows', () => {
 		// 09:05–09:15 between Q 1 and Q 2 is too short to count.
 		expect(teamOf(schedule(), '1A')).toEqual({
 			status: 'window',
-			window: { start: ms('09:30'), end: ms('10:50'), from: { kind: 'match', name: 'Q 2' }, until: { kind: 'match', name: 'Q 3' } }
+			windows: [{ start: ms('09:30'), end: ms('10:50'), from: { kind: 'match', name: 'Q 2' }, until: { kind: 'match', name: 'Q 3' } }]
 		});
 	});
 
@@ -80,7 +80,7 @@ describe('free windows', () => {
 		const matches = [...day(), match('Q 1', at('11:00'), ['3A'], ['2A']), match('Q 2', at('11:30'), ['3A'], ['1A'])];
 		expect(teamOf(matches, '3A')).toEqual({
 			status: 'window',
-			window: { start: ms('08:50'), end: ms('10:50'), from: { kind: 'day' }, until: { kind: 'match', name: 'Q 1' } }
+			windows: [{ start: ms('08:50'), end: ms('10:50'), from: { kind: 'day' }, until: { kind: 'match', name: 'Q 1' } }]
 		});
 	});
 
@@ -88,7 +88,7 @@ describe('free windows', () => {
 		const matches = [...day(), match('Q 1', at('09:00'), ['1A'], ['2A']), match('Q 2', at('09:20'), ['1A'], ['2A'])];
 		expect(teamOf(matches, '1A')).toEqual({
 			status: 'window',
-			window: { start: ms('09:25'), end: ms('12:05'), from: { kind: 'match', name: 'Q 2' }, until: { kind: 'day' } }
+			windows: [{ start: ms('09:25'), end: ms('12:05'), from: { kind: 'match', name: 'Q 2' }, until: { kind: 'day' } }]
 		});
 	});
 
@@ -101,12 +101,16 @@ describe('free windows', () => {
 		];
 		const result = teamOf(matches, '1A');
 		// The rest of day one, 09:05–12:05 — not 09:05 until 10:50 the next morning.
-		expect(result?.status === 'window' && result.window).toMatchObject({ start: ms('09:05'), end: ms('12:05'), until: { kind: 'day' } });
+		expect(result?.status === 'window' && result.windows[0]).toMatchObject({
+			start: ms('09:05'),
+			end: ms('12:05'),
+			until: { kind: 'day' }
+		});
 	});
 
 	it('hides time that has already passed and starts a current window at now', () => {
 		const result = teamOf(schedule(), '1A', ms('10:00'));
-		expect(result?.status === 'window' && result.window).toMatchObject({ start: ms('10:00'), until: { kind: 'match', name: 'Q 3' } });
+		expect(result?.status === 'window' && result.windows[0]).toMatchObject({ start: ms('10:00'), until: { kind: 'match', name: 'Q 3' } });
 	});
 
 	it('reports a team with nothing left today as none left', () => {
@@ -129,7 +133,7 @@ describe('free windows', () => {
 			match('Q 3', at('09:10'), ['1A'], ['4A'])
 		];
 		const result = teamOf(matches, '1A');
-		expect(result?.status === 'window' && result.window).toMatchObject({ start: ms('09:15'), from: { kind: 'match', name: 'Q 3' } });
+		expect(result?.status === 'window' && result.windows[0]).toMatchObject({ start: ms('09:15'), from: { kind: 'match', name: 'Q 3' } });
 	});
 
 	it('shows the first window long enough, not the longest', () => {
@@ -140,7 +144,7 @@ describe('free windows', () => {
 			match('Q 3', at('12:00'), ['1A'], ['2A'])
 		];
 		// 09:05–09:30 comes before the much longer 09:45–11:50.
-		expect(teamOf(matches, '1A')).toMatchObject({ status: 'window', window: { start: ms('09:05'), end: ms('09:30') } });
+		expect(teamOf(matches, '1A')).toMatchObject({ status: 'window', windows: [{ start: ms('09:05'), end: ms('09:30') }] });
 	});
 
 	it('takes the minimum length the judge picks', () => {
@@ -151,7 +155,30 @@ describe('free windows', () => {
 			match('Q 3', at('12:00'), ['1A'], ['2A'])
 		];
 		const result = freeTime(matches, ['1A'], { ...opts(), minLengthMs: 30 * MIN }).teams.get('1A');
-		expect(result).toMatchObject({ status: 'window', window: { start: ms('09:45'), end: ms('11:50') } });
+		expect(result).toMatchObject({ status: 'window', windows: [{ start: ms('09:45'), end: ms('11:50') }] });
+	});
+
+	it('lists the next few windows soonest first when asked for more than one', () => {
+		const matches = [
+			...day(),
+			match('Q 1', at('09:00'), ['1A'], ['2A']),
+			match('Q 2', at('09:40'), ['1A'], ['2A']),
+			match('Q 3', at('10:30'), ['1A'], ['2A']),
+			match('Q 4', at('11:10'), ['1A'], ['2A'])
+		];
+		const result = freeTime(matches, ['1A'], { ...opts(), maxWindows: 3 }).teams.get('1A');
+		// Four windows (09:05, 09:45, 10:35, 11:15) — only the first three come back.
+		expect(result?.status === 'window' && result.windows.map((w) => [w.start, w.end])).toEqual([
+			[ms('09:05'), ms('09:30')],
+			[ms('09:45'), ms('10:20')],
+			[ms('10:35'), ms('11:00')]
+		]);
+	});
+
+	it('returns what windows there are when fewer than asked for are left', () => {
+		const result = freeTime(schedule(), ['1A'], { ...opts(ms('11:30')), maxWindows: 3 }).teams.get('1A');
+		// Only 11:30–11:50 before Q 4; after Q 4 the day ends at 12:05.
+		expect(result?.status === 'window' && result.windows.map((w) => w.start)).toEqual([ms('11:30')]);
 	});
 
 	it('counts a window under way only if enough of it is left', () => {
@@ -162,7 +189,7 @@ describe('free windows', () => {
 			match('Q 3', at('12:00'), ['1A'], ['2A'])
 		];
 		// At 09:20 only 10 minutes of 09:05–09:30 are left.
-		expect(teamOf(matches, '1A', ms('09:20'))).toMatchObject({ status: 'window', window: { start: ms('09:45') } });
+		expect(teamOf(matches, '1A', ms('09:20'))).toMatchObject({ status: 'window', windows: [{ start: ms('09:45') }] });
 	});
 });
 
@@ -183,7 +210,7 @@ describe('schedule breaks', () => {
 		// 09:05–13:50 would be the longest window, but 12:00–12:50 is lunch for everyone.
 		expect(teamOf(matches, '1A')).toEqual({
 			status: 'window',
-			window: { start: ms('09:05'), end: ms('12:00'), from: { kind: 'match', name: 'Q 1' }, until: { kind: 'break' } }
+			windows: [{ start: ms('09:05'), end: ms('12:00'), from: { kind: 'match', name: 'Q 1' }, until: { kind: 'break' } }]
 		});
 	});
 
@@ -266,7 +293,7 @@ describe('running late', () => {
 		matches.push(match('Q 1', at('09:00'), ['1A'], ['2A']), match('Q 2', at('10:00'), ['1A'], ['2A']));
 		const result = freeTime(matches, ['1A'], opts());
 		// Q 1 now ends 09:25 and Q 2 queues from 10:10, rather than 09:05 and 09:50.
-		expect(result.teams.get('1A')).toMatchObject({ status: 'window', window: { start: ms('09:25'), end: ms('10:10') } });
+		expect(result.teams.get('1A')).toMatchObject({ status: 'window', windows: [{ start: ms('09:25'), end: ms('10:10') }] });
 		expect(result.delayMs).toBe(20 * MIN);
 	});
 });
