@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { trimBlanks } from '$lib/text';
 	import { m } from '$lib/paraglide/messages.js';
 	import { app, dialogs } from '$lib/index.svelte';
 	import CopyIcon from '$lib/icon/CopyIcon.svelte';
@@ -10,6 +11,7 @@
 
 	import AccessLinkDialog from '$lib/components/access/AccessLinkDialog.svelte';
 	import AccessPassesDialog from '$lib/components/access/AccessPassesDialog.svelte';
+	import { addAndInviteJudge } from '$lib/components/access/invite-judge';
 	import { canUseClipboard, errorToString } from '$lib/utils.svelte';
 	import { onDestroy, onMount } from 'svelte';
 	import type { AccessLinks } from '@robotools.app/protocol/src/access';
@@ -35,6 +37,7 @@
 		isSelf?: boolean;
 		/** Judges only: the saved address, or null. Advisors are handed their links in person. */
 		email?: string | null;
+		isLeadJudge?: boolean;
 	};
 
 	let accessLinks = $state<AccessLinks | null>(null);
@@ -85,7 +88,8 @@
 				authToken: judge.authToken,
 				kind: 'judge' as const,
 				judgeId: judge.judgeId,
-				email: judge.email
+				email: judge.email,
+				isLeadJudge: judge.isLeadJudge
 			}))
 		];
 	});
@@ -177,6 +181,20 @@
 		await loadAccessLinks();
 	}
 
+	async function addJudge() {
+		if (await addAndInviteJudge()) await loadAccessLinks();
+	}
+
+	async function toggleLeadJudge(user: UserRow) {
+		if (!user.judgeId) return;
+		try {
+			await app.wrpcClient.access.setLeadJudge.mutation({ judgeId: user.judgeId, isLeadJudge: !user.isLeadJudge });
+			await loadAccessLinks();
+		} catch (error) {
+			dialogs.showAlert({ title: m.failed(), message: errorToString(error), confirmButtonClass: 'primary' });
+		}
+	}
+
 	async function addJudgeAdvisor() {
 		const name = await dialogs.showPrompt({
 			title: m.add_judge_advisor(),
@@ -258,7 +276,7 @@
 
 	function isEmailDirty(user: UserRow): boolean {
 		const draft = emailDrafts[user.key];
-		return draft !== undefined && draft.trim() !== (user.email ?? '');
+		return draft !== undefined && trimBlanks(draft) !== (user.email ?? '');
 	}
 
 	function onEmailInput(user: UserRow, value: string) {
@@ -278,7 +296,7 @@
 	async function saveJudgeEmail(user: UserRow) {
 		if (!user.judgeId) return;
 
-		const raw = (emailDrafts[user.key] ?? '').trim();
+		const raw = trimBlanks(emailDrafts[user.key] ?? '');
 		const email = raw === '' ? null : raw;
 
 		if (email !== null && !JudgeEmailSchema.safeParse(email).success) {
@@ -338,7 +356,7 @@
 	async function saveAdvisorEmail(user: UserRow) {
 		if (!user.judgeAdvisorId) return;
 
-		const raw = (emailDrafts[user.key] ?? '').trim();
+		const raw = trimBlanks(emailDrafts[user.key] ?? '');
 		const email = raw === '' ? null : raw;
 
 		if (email !== null && !JudgeEmailSchema.safeParse(email).success) {
@@ -486,7 +504,7 @@
 
 		<div class="mb-4 flex shrink-0 items-start justify-between gap-3">
 			<p class="text-xs text-gray-600">{m.users_dialog_description()}</p>
-			<div class="flex shrink-0 items-center gap-2">
+			<div class="flex flex-wrap items-center justify-end gap-2">
 				{#if emailEnabled}
 					<button
 						type="button"
@@ -505,6 +523,9 @@
 					disabled={!accessLinks || accessLinks.judges.length === 0}
 				>
 					{m.print_judge_passes()}
+				</button>
+				<button type="button" class="primary tiny shrink-0" onclick={addJudge} disabled={isDisconnectedFromServer}>
+					{m.add_judge()}
 				</button>
 				<button type="button" class="primary tiny shrink-0" onclick={addJudgeAdvisor} disabled={isDisconnectedFromServer}>
 					{m.add_judge_advisor()}
@@ -569,6 +590,9 @@
 									{/if}
 									<!-- Both are Judge Advisors here with the same powers. The badge says where
 									     they are administered, which is where they can be removed. -->
+									{#if user.isLeadJudge}
+										<span class="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">{m.lead_judge()}</span>
+									{/if}
 									{#if user.origin === 'group'}
 										<span class="rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700">{m.via_event_group()}</span>
 									{/if}
@@ -722,6 +746,14 @@
 											{sendingKey === user.key ? '…' : m.email_access_link()}
 										</button>
 									{/if}
+									<button
+										type="button"
+										class="lightweight tiny shrink-0"
+										onclick={() => toggleLeadJudge(user)}
+										disabled={isDisconnectedFromServer}
+									>
+										{user.isLeadJudge ? m.remove_lead_judge() : m.make_lead_judge()}
+									</button>
 								</div>
 								{#if emailErrors[user.key]}
 									<p class="mt-1 text-xs text-red-600">{emailErrors[user.key]}</p>

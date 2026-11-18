@@ -34,6 +34,11 @@ export const clientRouter = buildClientRouter({
 		app.handleTeamDataUpdate(input);
 	},
 
+	onTeamScreeningUpdate: (input) => {
+		console.log(`🚩 Team screening updated:`, input);
+		app.handleTeamScreeningUpdate(input);
+	},
+
 	onAllJudgesUpdate: (input) => {
 		console.log(`📊 Judges updated:`, input);
 		app.handleAllJudgesUpdate(input);

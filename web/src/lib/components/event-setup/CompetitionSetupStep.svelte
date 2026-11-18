@@ -5,6 +5,7 @@
 	import { EVENT_NAME_MAX_LENGTH, type EventGradeLevel } from '@robotools.app/protocol/src/event';
 	import { parseTournamentManagerCSV, type TeamInfoAndData } from '$lib/team.svelte';
 	import type { AwardOptions } from '$lib/award.svelte';
+	import { trimBlanks } from '$lib/text';
 	import { v4 as uuidv4 } from 'uuid';
 
 	interface Props {
@@ -44,12 +45,12 @@
 	const gradeOptions = $derived(getEventGradeLevelOptions(selectedProgram));
 
 	// Validation
-	const isEventNameValid = $derived(eventName.trim().length > 0);
-	const hasLeadingTrailingWhitespace = $derived(eventName.length > 0 && eventName !== eventName.trim());
-	const isEventNameTooLong = $derived(eventName.length > EVENT_NAME_MAX_LENGTH);
+	const trimmedEventName = $derived(trimBlanks(eventName));
+	const isEventNameValid = $derived(trimmedEventName.length > 0);
+	const isEventNameTooLong = $derived(trimmedEventName.length > EVENT_NAME_MAX_LENGTH);
 
 	const canProceed = $derived(
-		isEventNameValid && !hasLeadingTrailingWhitespace && !isEventNameTooLong && (robotEventsEventId !== null || teams.length > 0) // For unofficial events, teams must be imported
+		isEventNameValid && !isEventNameTooLong && (robotEventsEventId !== null || teams.length > 0) // For unofficial events, teams must be imported
 	);
 
 	/*
@@ -168,6 +169,7 @@
 
 	function handleNext() {
 		if (canProceed) {
+			eventName = trimmedEventName;
 			if (originalSelectedEventGradeLevel !== selectedEventGradeLevel || originalSelectedProgram !== selectedProgram) {
 				awardOptions = []; // reset awards, the award options will be re-generated based on the new program and grade level
 			}
@@ -196,17 +198,16 @@
 				type="text"
 				id="event-name"
 				bind:value={eventName}
+				onblur={() => (eventName = trimmedEventName)}
 				maxlength={EVENT_NAME_MAX_LENGTH}
 				class="classic block w-full"
-				class:border-red-500={!isEventNameValid || hasLeadingTrailingWhitespace || isEventNameTooLong}
-				class:focus:ring-red-500={!isEventNameValid || hasLeadingTrailingWhitespace || isEventNameTooLong}
+				class:border-red-500={!isEventNameValid || isEventNameTooLong}
+				class:focus:ring-red-500={!isEventNameValid || isEventNameTooLong}
 				placeholder={m.enter_event_name()}
 				disabled={!isEditable}
 			/>
 			{#if !isEventNameValid}
 				<p class="mt-1 text-sm text-red-600">{m.event_name_is_required()}</p>
-			{:else if hasLeadingTrailingWhitespace}
-				<p class="mt-1 text-sm text-red-600">{m.event_name_whitespace_error_message()}</p>
 			{:else if isEventNameTooLong}
 				<p class="mt-1 text-sm text-red-600">{m.event_name_too_long_error_message({ max: EVENT_NAME_MAX_LENGTH })}</p>
 			{/if}

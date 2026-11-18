@@ -40,7 +40,15 @@ export const JudgeSchema = z.object({
 	 * it was never shown. Reading them back is Judge Advisor-only, via
 	 * `access.listAccessLinks`.
 	 */
-	email: JudgeEmailSchema.nullable().optional()
+	email: JudgeEmailSchema.nullable().optional(),
+	/**
+	 * Whether this judge may add judges and hand out judges' access links.
+	 *
+	 * Read-only through this schema. Clients round-trip the judge list whenever they move or
+	 * rename someone, so accepting it here would let a stale list change who holds the
+	 * permission. Only `access.setLeadJudge` writes it.
+	 */
+	isLeadJudge: z.boolean().optional()
 });
 
 export type Judge = z.infer<typeof JudgeSchema>;

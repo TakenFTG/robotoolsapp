@@ -8,6 +8,7 @@
 	import { flip } from 'svelte/animate';
 	import { assignTeamsLevellingGroups } from '$lib/judging.svelte';
 	import TeamPlate from '$lib/components/event-setup/TeamPlate.svelte';
+	import { addAndInviteJudge } from '$lib/components/access/invite-judge';
 	import UserIcon from '$lib/icon/UserIcon.svelte';
 	import UsersIcon from '$lib/icon/UsersIcon.svelte';
 	import XmarkIcon from '$lib/icon/XmarkIcon.svelte';
@@ -218,6 +219,12 @@
 	}
 
 	async function addJudge(groupId: string) {
+		// With access control on, a new judge can't get in without their link.
+		if (app.isAccessControlEnabled()) {
+			await addAndInviteJudge(groupId);
+			return;
+		}
+
 		const name = await dialogs.showPrompt({
 			title: m.add_judge(),
 			message: m.judge_name_colon(),

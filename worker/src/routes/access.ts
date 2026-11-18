@@ -1,5 +1,6 @@
 import {
 	AccessLinksSchema,
+	JudgeAccessLinksSchema,
 	AuthTokenSchema,
 	JudgeAdvisorIdSchema,
 	JudgeAdvisorNameSchema,
@@ -26,6 +27,7 @@ import { eq } from 'drizzle-orm';
 import z from 'zod';
 import {
 	assertAuthenticatedJudgeAdvisor,
+	assertCanInviteJudges,
 	generateAuthToken,
 	countJudgeAdvisors,
 	getJudgeAdvisors,
@@ -38,6 +40,7 @@ import type { ServerContext } from '../server-router';
 import { WRPCError } from '@robotools.app/wrpc/server/types';
 import { broadcastDeviceListUpdate } from './device';
 import { notifyAuthenticationChange } from './notify';
+import { getJudges } from './judge';
 
 /**
  * The group's advisors, as this room sees them: names only, never tokens.
@@ -80,6 +83,18 @@ async function countGroupAdvisorsForRoom(ctx: ServerContext): Promise<number> {
 	}
 }
 
+async function listJudgeLinkRows(ctx: ServerContext) {
+	return ctx.db
+		.select({
+			judgeId: judges.id,
+			name: judges.name,
+			authToken: judges.authToken,
+			email: judges.email,
+			isLeadJudge: judges.isLeadJudge
+		})
+		.from(judges);
+}
+
 /** Refuse an action that only makes sense for a Judge Advisor the room itself administers. */
 function assertRoomAdministeredAdvisor(judgeAdvisorId: string): void {
 	if (isGroupScopedAdvisorId(judgeAdvisorId)) {
@@ -103,9 +118,7 @@ export function buildAccessRoute(w: WRPCRootObject<object, ServerContext, Record
 				throw new WRPCError('CRITICAL: No Judge Advisor access token');
 			}
 
-			const judgeRows = await ctx.db
-				.select({ judgeId: judges.id, name: judges.name, authToken: judges.authToken, email: judges.email })
-				.from(judges);
+			const judgeRows = await listJudgeLinkRows(ctx);
 
 			return {
 				emailCapability: {
@@ -134,14 +147,43 @@ export function buildAccessRoute(w: WRPCRootObject<object, ServerContext, Record
 						origin: 'group' as const
 					}))
 				],
-				judges: judgeRows.map((row) => ({
-					judgeId: row.judgeId,
-					name: row.name,
-					authToken: row.authToken,
-					email: row.email
-				}))
+				judges: judgeRows
 			};
 		}),
+
+		/** The Lead Judge's view of the roster: judges only, with no Judge Advisor in it. */
+		listJudgeAccessLinks: w.procedure.output(JudgeAccessLinksSchema).query(async ({ ctx }) => {
+			await assertCanInviteJudges(ctx.db, ctx.auth);
+
+			return {
+				emailCapability: {
+					enabled: ctx.email.sender.enabled,
+					fromAddress: ctx.email.sender.fromAddress
+				},
+				judges: await listJudgeLinkRows(ctx)
+			};
+		}),
+
+		/** Give a judge the Lead Judge role, or take it away. */
+		setLeadJudge: w.procedure
+			.input(z.object({ judgeId: z.uuidv4(), isLeadJudge: z.boolean() }))
+			.mutation(async ({ ctx, input, session }) => {
+				assertAuthenticatedJudgeAdvisor(ctx.auth);
+
+				const updated = await ctx.db
+					.update(judges)
+					.set({ isLeadJudge: input.isLeadJudge })
+					.where(eq(judges.id, input.judgeId))
+					.returning({ id: judges.id });
+				if (updated.length === 0) {
+					throw new WRPCError('CRITICAL: Judge not found');
+				}
+
+				// Do not wait for the broadcast to complete
+				getJudges(ctx.db).then((judgesList) => {
+					session.broadcast<ClientRouter>().onAllJudgesUpdate.mutation(judgesList);
+				});
+			}),
 
 		rotateJudgeAuth: w.procedure
 			.input(z.object({ judgeId: z.uuidv4() }))
@@ -174,7 +216,7 @@ export function buildAccessRoute(w: WRPCRootObject<object, ServerContext, Record
 			.input(z.object({ judgeId: z.uuidv4(), email: JudgeEmailSchema.nullable() }))
 			.output(z.object({ email: JudgeEmailSchema.nullable() }))
 			.mutation(async ({ ctx, input }) => {
-				assertAuthenticatedJudgeAdvisor(ctx.auth);
+				await assertCanInviteJudges(ctx.db, ctx.auth);
 
 				const email = input.email?.trim().toLowerCase() || null;
 				const updated = await ctx.db.update(judges).set({ email }).where(eq(judges.id, input.judgeId)).returning();
@@ -283,7 +325,7 @@ export function buildAccessRoute(w: WRPCRootObject<object, ServerContext, Record
 			.input(z.object({ judgeIds: z.array(z.uuidv4()).min(1).max(MAX_ACCESS_LINK_EMAILS_PER_SEND).nullable() }))
 			.output(SendAccessLinkEmailsResultSchema)
 			.mutation(async ({ ctx, input }) => {
-				assertAuthenticatedJudgeAdvisor(ctx.auth);
+				await assertCanInviteJudges(ctx.db, ctx.auth);
 
 				if (!ctx.email.sender.enabled) {
 					throw new WRPCError('CRITICAL: This server is not configured to send email');

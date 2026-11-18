@@ -163,7 +163,8 @@
 			break-inside: avoid;
 		}
 
-		:global(button) {
+		/* The proficiency squares are buttons, and they carry the rubric's text. */
+		:global(button:not(rubric-table button)) {
 			display: none !important;
 		}
 	}
@@ -192,7 +193,14 @@
 			@apply invisible;
 		}
 
+		/* This page is the paper rubric, so the scoring controls stay off it. */
 		rubric-table button {
+			@apply pointer-events-none;
+		}
+
+		rubric-table select,
+		.rubric-stacked select,
+		.rubric-keyboard-hint {
 			@apply hidden;
 		}
 	}

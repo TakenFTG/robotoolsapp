@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { initWRPC } from '@robotools.app/wrpc/client';
 import { ClientAuthenticationSchema } from '@robotools.app/protocol/src/access';
 import { DeviceInfoSchema } from '@robotools.app/protocol/src/client';
-import { TeamDataSchema } from '@robotools.app/protocol/src/team';
+import { TeamDataSchema, TeamScreeningUpdateSchema } from '@robotools.app/protocol/src/team';
 import { JudgeSchema } from '@robotools.app/protocol/src/judging';
 import {
 	AwardNominationSchema,
@@ -25,6 +25,7 @@ export type ClientRouterHandlers = {
 	onClientAuthenticationChange: (input: z.infer<typeof ClientAuthenticationSchema>) => void | Promise<void>;
 	onAllTeamDataUpdate: (input: z.infer<typeof TeamDataSchema>[]) => void | Promise<void>;
 	onTeamDataUpdate: (input: z.infer<typeof TeamDataSchema>) => void | Promise<void>;
+	onTeamScreeningUpdate: (input: z.infer<typeof TeamScreeningUpdateSchema>) => void | Promise<void>;
 	onAllJudgesUpdate: (input: z.infer<typeof JudgeSchema>[]) => void | Promise<void>;
 	onAwardRankingsUpdate: (input: z.infer<typeof AwardRankingsPartialUpdateSchema>) => void | Promise<void>;
 	onReviewedTeamsUpdate: (input: { judgeGroupId: string; teamId: string }) => void | Promise<void>;
@@ -59,6 +60,9 @@ export function buildClientRouter(handlers: ClientRouterHandlers) {
 		}),
 		onTeamDataUpdate: w.procedure.input(TeamDataSchema).mutation(async ({ input }) => {
 			await handlers.onTeamDataUpdate(input);
+		}),
+		onTeamScreeningUpdate: w.procedure.input(TeamScreeningUpdateSchema).mutation(async ({ input }) => {
+			await handlers.onTeamScreeningUpdate(input);
 		}),
 		onAllJudgesUpdate: w.procedure.input(z.array(JudgeSchema)).mutation(async ({ input }) => {
 			await handlers.onAllJudgesUpdate(input);

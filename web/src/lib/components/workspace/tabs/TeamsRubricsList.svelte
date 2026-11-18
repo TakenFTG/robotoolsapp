@@ -9,6 +9,7 @@
 	import type { Submission } from '@robotools.app/protocol/src/rubric';
 	import { canEnterNotebookRubric, type NotebookDevelopmentStatus } from '@robotools.app/protocol/src/team';
 	import QRCodeButton from './QRCodeButton.svelte';
+	import TeamScreeningButton from './TeamScreeningButton.svelte';
 	import TeamPhotoAlbum from '../TeamPhotoAlbum.svelte';
 
 	interface Props {
@@ -45,6 +46,7 @@
 	let showOnlyAssignedTeams = $state(true); // Default to true as requested
 	let showOnlyFullyDeveloped = $state(false);
 	let showOnlyInterviewed = $state(false);
+	let showOnlyFlagged = $state(false);
 
 	const { registerScrollContainer, scrollLeft, scrollRight } = scrollSync();
 
@@ -65,7 +67,7 @@
 		}
 
 		// Apply filters
-		if (showOnlyFullyDeveloped || showOnlyInterviewed) {
+		if (showOnlyFullyDeveloped || showOnlyInterviewed || showOnlyFlagged) {
 			teamIdsInOrder = teamIdsInOrder.filter((teamId) => {
 				const team = teams[teamId];
 				if (!team) return false;
@@ -79,6 +81,10 @@
 				if (showOnlyInterviewed) {
 					const teamRubricsAndNotes = data[teamId] ?? getEmptyRubricsAndNotesPerTeam();
 					passesFilter = passesFilter && teamRubricsAndNotes.teamInterviewRubrics.length > 0;
+				}
+
+				if (showOnlyFlagged) {
+					passesFilter = passesFilter && app.getTeamScreening(teamId) !== null;
 				}
 
 				return passesFilter;
@@ -228,6 +234,16 @@
 			<span class="text-sm text-gray-700">{m.only_show_interviewed_teams()}</span>
 		</label>
 	</div>
+	<div>
+		<label class="flex items-center space-x-2">
+			<input
+				type="checkbox"
+				bind:checked={showOnlyFlagged}
+				class="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+			/>
+			<span class="text-sm text-gray-700">{m.only_show_flagged_teams()}</span>
+		</label>
+	</div>
 </div>
 
 <!-- Progress Indicators -->
@@ -302,6 +318,7 @@
 						{#if team.hasSeasonSummary}
 							<span class="text-xs font-medium text-blue-700" title={m.season_summary_badge_title()}>{m.season_summary_badge()}</span>
 						{/if}
+						<TeamScreeningButton teamId={team.id} teamNumber={team.number} />
 					</div>
 				</team>
 				<scroll-container use:registerScrollContainer>

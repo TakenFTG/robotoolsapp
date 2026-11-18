@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { m } from '$lib/paraglide/messages.js';
 	import { JudgeEmailSchema } from '@robotools.app/protocol/src/email';
+	import { trimBlanks } from '$lib/text';
 
 	/**
 	 * Who is running this event.
@@ -30,8 +31,8 @@
 
 	let emailTouched = $state(false);
 
-	const trimmedName = $derived(name.trim());
-	const trimmedEmail = $derived(email.trim());
+	const trimmedName = $derived(trimBlanks(name));
+	const trimmedEmail = $derived(trimBlanks(email));
 	const emailValid = $derived(trimmedEmail === '' || JudgeEmailSchema.safeParse(trimmedEmail).success);
 	const canContinue = $derived(trimmedName.length > 0 && emailValid);
 

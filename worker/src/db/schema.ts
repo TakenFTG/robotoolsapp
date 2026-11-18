@@ -143,6 +143,15 @@ export const teams = sqliteTable(
 	(table) => [uniqueIndex('teams_number').on(table.number), index('teams_group').on(table.group)]
 );
 
+/** Teams flagged for a second interview or further discussion. A row is the flag. */
+export const teamScreenings = sqliteTable('TeamScreenings', {
+	teamId: text('teamId')
+		.primaryKey()
+		.references(() => teams.id, { onDelete: 'cascade' }),
+	note: text('note').notNull(),
+	updatedAt: integer('updatedAt').notNull()
+});
+
 export const judgeGroups = sqliteTable('JudgeGroups', {
 	id: text('id').primaryKey(),
 	name: text('name').notNull()
@@ -181,7 +190,9 @@ export const judges = sqliteTable(
 		 * surprising failure at the worst moment. It lives in the room's own database, so
 		 * destroying the event destroys the addresses with it.
 		 */
-		email: text('email')
+		email: text('email'),
+		/** May add judges and hand out judges' access links. Set by a Judge Advisor. */
+		isLeadJudge: integer('isLeadJudge', { mode: 'boolean' }).notNull().default(false)
 	},
 	(table) => [uniqueIndex('judges_authToken').on(table.authToken)]
 );

@@ -11,6 +11,7 @@
 	import ShareDialog from './ShareDialog.svelte';
 	import DevicesDialog from './DevicesDialog.svelte';
 	import UsersDialog from './UsersDialog.svelte';
+	import ManageJudgesDialog from '$lib/components/access/ManageJudgesDialog.svelte';
 	import RoleSelectionDialog from './RoleSelectionDialog.svelte';
 	import EventsDialog from './EventsDialog.svelte';
 	import PreferencesDialog from './PreferencesDialog.svelte';
@@ -48,6 +49,11 @@
 			props: {},
 			maxWidth: 'max-w-4xl'
 		});
+	}
+
+	function handleManageJudges() {
+		closeMenu();
+		void dialogs.showCustom(ManageJudgesDialog, { props: {}, maxWidth: 'max-w-4xl' });
 	}
 
 	function handleSwitchRole() {
@@ -216,6 +222,16 @@
 				</span>
 				<span>{roomDialogLabel}</span>
 			</button>
+
+			<!-- A Judge Advisor does all of this from Users, so this is for Lead Judges. -->
+			{#if !isJudgeAdvisor && app.canInviteJudges()}
+				<button onclick={handleManageJudges} class="menu-item" role="menuitem">
+					<span class="mr-3">
+						<UsersIcon size={16} />
+					</span>
+					<span>{m.manage_judges()}</span>
+				</button>
+			{/if}
 
 			<!-- Referee notes: Judge Advisors only, and only with access control on, since a
 			     link hands this division's teams and schedule to another app. -->

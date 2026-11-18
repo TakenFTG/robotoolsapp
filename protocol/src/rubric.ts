@@ -405,6 +405,14 @@ export const TeamInterviewRubricSchema = z
 
 export type TeamInterviewRubric = z.infer<typeof TeamInterviewRubricSchema>;
 
+/** One submitted interview rubric's total. A team has one of these per rubric. */
+export const TeamInterviewScoreSchema = z.object({
+	teamId: z.uuidv4(),
+	score: z.number()
+});
+
+export type TeamInterviewScore = z.infer<typeof TeamInterviewScoreSchema>;
+
 export const TeamInterviewNoteSchema = z.object({
 	id: z.uuidv4(),
 	teamId: z.uuidv4(),

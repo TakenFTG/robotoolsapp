@@ -1,5 +1,6 @@
 <script lang="ts">
 	import RefNotesBadge from './RefNotesBadge.svelte';
+	import TeamScreeningButton from './TeamScreeningButton.svelte';
 	import { m } from '$lib/paraglide/messages.js';
 	import './eligibility-table.css';
 	import type { ExcellenceAwardCandidatesTab } from '$lib/tab.svelte';
@@ -14,6 +15,9 @@
 	import { isExcellenceAward } from '@robotools.app/protocol/src/award';
 	import RefreshIcon from '$lib/icon/RefreshIcon.svelte';
 	import { sanitizeHTMLMessage } from '$lib/i18n';
+	import { rankTeamsByInterview } from '$lib/interview-rank';
+	import type { TeamInterviewScore } from '@robotools.app/protocol/src/rubric';
+	import type { NotebookDevelopmentStatus } from '@robotools.app/protocol/src/team';
 
 	interface Props {
 		tab: ExcellenceAwardCandidatesTab;
@@ -23,6 +27,7 @@
 	let isFetching = $state(false);
 	let { tab, isActive }: Props = $props();
 	let reports = $state<Record<string, ExcellenceAwardCandidatesReport>>({});
+	let interviewScores = $state<TeamInterviewScore[]>([]);
 
 	const essentialData = $derived(app.getEssentialData());
 	const hasRobotEventsId = $derived(!!essentialData?.robotEventsEventId && !!essentialData?.divisionId);
@@ -38,12 +43,31 @@
 	 */
 	const isAwardDeliberationStarted = $derived(essentialData?.judgingStep === 'award_deliberations');
 
+	/** RobotEvents knows teams by number, and the room's own records are keyed by id. */
+	const roomTeamsByNumber = $derived(new Map(Object.values(app.getAllTeamInfoAndData()).map((team) => [team.number, team])));
+
+	function getNotebookIndicator(status: NotebookDevelopmentStatus | undefined) {
+		if (status === 'fully_developed')
+			return { text: m.fully_developed_notebook_status(), dot: 'bg-green-500', textClass: 'text-green-500' };
+		if (status === 'developing') return { text: m.developing_notebook_status(), dot: 'bg-amber-400', textClass: '' };
+		return { text: m.no_notebook_or_not_reviewed(), dot: 'bg-gray-300', textClass: 'text-gray-500' };
+	}
+
+	async function fetchInterviewScores() {
+		try {
+			interviewScores = await app.wrpcClient.judging.getTeamInterviewScores.query();
+		} catch (error) {
+			console.error('Failed to load interview scores:', error);
+		}
+	}
+
 	async function fetchExcellenceAwardTeamEligibility() {
 		if (!essentialData) return;
 		const { robotEventsEventId, divisionId } = essentialData;
 		if (!robotEventsEventId || !divisionId) return;
 
 		isFetching = true;
+		void fetchInterviewScores();
 		try {
 			const client = getRobotEventsClient();
 			const result = await getEventDivisionExcellenceAwardCandidatesReport(client, robotEventsEventId, divisionId, excellenceAwards);
@@ -134,6 +158,10 @@
 				{@const divisionId = essentialData?.divisionId}
 				{@const teams = sortByTeamNumberAndEligibility(report.teamsInGroup)}
 				{@const eligibleTeams = teams.filter((t) => t.isEligible)}
+				{@const interviewStandings = rankTeamsByInterview(
+					interviewScores,
+					teams.flatMap((t) => roomTeamsByNumber.get(t.teamNumber)?.id ?? [])
+				)}
 				<div class="mb-2 rounded-lg bg-white p-6 shadow-sm">
 					<h3 class="mb-2 text-lg font-semibold text-gray-900">{awardName}</h3>
 					<div class="mb-2 space-y-2 text-sm text-gray-600">
@@ -219,6 +247,7 @@
 						{:else}
 							<p>{m.no_teams_are_eligible_for_this_award()}</p>
 						{/if}
+						<p>{m.excellence_interview_rank_description()}</p>
 					</div>
 					<div>
 						<award-rankings-table>
@@ -233,16 +262,28 @@
 										<div class="flex min-h-14 max-w-1/3 min-w-40 items-center justify-center p-2 text-center">
 											{m.autonomous_coding_skills_rank()}
 										</div>
+										<div class="flex min-h-14 max-w-1/3 min-w-40 items-center justify-center p-2 text-center">
+											{m.excellence_notebook_status()}
+										</div>
+										<div class="flex min-h-14 max-w-1/3 min-w-40 items-center justify-center p-2 text-center">
+											{m.excellence_interview_rank()}
+										</div>
 									</content>
 								</scroll-container>
 							</table-header>
 							<table-body>
 								{#each teams as team (team.teamNumber)}
+									{@const roomTeam = roomTeamsByNumber.get(team.teamNumber)}
+									{@const notebook = getNotebookIndicator(roomTeam?.notebookDevelopmentStatus)}
+									{@const interview = roomTeam ? interviewStandings.get(roomTeam.id) : undefined}
 									<row>
 										<team>
 											<div class="flex items-center gap-1" class:text-green-500={team.isEligible}>
 												{team.teamNumber}
 												<RefNotesBadge teamNumber={team.teamNumber} />
+												{#if roomTeam}
+													<TeamScreeningButton teamId={roomTeam.id} teamNumber={team.teamNumber} />
+												{/if}
 											</div>
 										</team>
 										<scroll-container use:registerScrollContainer>
@@ -262,6 +303,17 @@
 														No Data
 													{:else}
 														#{team.autoSkills.no} [Score: {team.autoSkills.score}]
+													{/if}
+												</div>
+												<div class="flex min-w-40 items-center justify-center gap-2 border-black text-center {notebook.textClass}">
+													<span class="h-2.5 w-2.5 shrink-0 rounded-full {notebook.dot}"></span>
+													{notebook.text}
+												</div>
+												<div class="min-w-40 border-black text-center">
+													{#if interview}
+														{m.excellence_interview_rank_value({ rank: interview.rank, average: Math.round(interview.average * 10) / 10 })}
+													{:else}
+														<span class="text-gray-500">{m.excellence_not_interviewed()}</span>
 													{/if}
 												</div>
 											</content>

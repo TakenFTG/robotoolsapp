@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { m } from '$lib/paraglide/messages.js';
+	import { trimBlanks } from '$lib/text';
 	import TeamGroup from './TeamGroup.svelte';
 	import { EditingTeamList, type TeamInfoAndData, groupTeamsByGroup } from '$lib/team.svelte';
 
@@ -22,10 +23,9 @@
 	const allTeamsHaveSameGrade = $derived(teams.every((team) => team.grade === teams[0]?.grade));
 
 	function createNewGroup() {
-		const trimmedName = newGroupName.trim();
-		const hasLeadingTrailingWhitespace = newGroupName.length > 0 && newGroupName !== newGroupName.trim();
+		const trimmedName = trimBlanks(newGroupName);
 
-		if (trimmedName && !hasLeadingTrailingWhitespace && trimmedName.length <= 100 && !teamGroups[trimmedName]) {
+		if (trimmedName && trimmedName.length <= 100 && !teamGroups[trimmedName]) {
 			teamGroups[trimmedName] = [];
 			newGroupName = '';
 		}
@@ -63,7 +63,7 @@
 			<h3 class="text-lg font-medium text-gray-800">{m.organize_teams()}</h3>
 			<div class="flex items-center gap-2">
 				<input type="text" bind:value={newGroupName} placeholder="New group name" maxlength="100" class="classic" />
-				<button onclick={createNewGroup} disabled={!newGroupName.trim()} class="primary tiny">{m.create_group()}</button>
+				<button onclick={createNewGroup} disabled={!trimBlanks(newGroupName)} class="primary tiny">{m.create_group()}</button>
 			</div>
 		</div>
 

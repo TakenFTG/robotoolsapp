@@ -6,6 +6,7 @@
 	import { EditingTeamList, type TeamInfoAndData } from '$lib/team.svelte';
 	import EditIcon from '$lib/icon/EditIcon.svelte';
 	import TrashBinIcon from '$lib/icon/TrashBinIcon.svelte';
+	import { trimBlanks } from '$lib/text';
 	import { tick } from 'svelte';
 
 	interface Props {
@@ -40,10 +41,9 @@
 	}
 
 	function saveGroupName() {
-		const trimmedName = editingName.trim();
-		const hasLeadingTrailingWhitespace = editingName.length > 0 && editingName !== editingName.trim();
+		const trimmedName = trimBlanks(editingName);
 
-		if (trimmedName && !hasLeadingTrailingWhitespace && trimmedName.length <= 100 && trimmedName !== groupName) {
+		if (trimmedName && trimmedName.length <= 100 && trimmedName !== groupName) {
 			const success = onRenameGroup(groupName, trimmedName);
 			if (success) {
 				isEditingName = false;

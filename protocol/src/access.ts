@@ -177,7 +177,8 @@ export const AccessLinkJudgeSchema = z.object({
 	name: z.string(),
 	authToken: AuthTokenSchema,
 	/** Null when no address has been recorded, which is the default. */
-	email: JudgeEmailSchema.nullable().default(null)
+	email: JudgeEmailSchema.nullable().default(null),
+	isLeadJudge: z.boolean().default(false)
 });
 
 export type AccessLinkJudge = z.infer<typeof AccessLinkJudgeSchema>;
@@ -218,3 +219,11 @@ export const AccessLinksSchema = z.object({
 });
 
 export type AccessLinks = z.infer<typeof AccessLinksSchema>;
+
+/** What a Lead Judge is given: judges' links only, never a Judge Advisor's. */
+export const JudgeAccessLinksSchema = z.object({
+	judges: z.array(AccessLinkJudgeSchema),
+	emailCapability: EmailCapabilitySchema.default({ enabled: false, fromAddress: null })
+});
+
+export type JudgeAccessLinks = z.infer<typeof JudgeAccessLinksSchema>;

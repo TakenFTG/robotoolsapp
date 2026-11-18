@@ -10,6 +10,7 @@
 	} from '@robotools.app/protocol/src/rubric';
 	import { getRubricCriterionTitle, getRubricSectionHeading, getRubricText } from '$lib/rubric-messages';
 	import InterviewScoringButtons from './InterviewScoringButtons.svelte';
+	import ScoreSelect from './ScoreSelect.svelte';
 
 	interface Props {
 		rubricScores: number[];
@@ -29,6 +30,8 @@
 	const sectionScoreOffsets = teamInterviewRubricSections.map((_, sectionIndex) =>
 		teamInterviewRubricSections.slice(0, sectionIndex).reduce((sum, section) => sum + section.criteria.length, 0)
 	);
+
+	const evidencePoints = teamInterviewEvidenceLevels.map((level) => level.points);
 
 	const totalScore = $derived.by(() => {
 		if (rubricScores.some((score) => score === -1)) {
@@ -58,6 +61,10 @@
 	full-width ones carrying both the heading and what it means, which is the shape the
 	notebook cards use.
 -->
+{#if !isSubmitted}
+	<p class="rubric-keyboard-hint mb-2 hidden text-xs text-gray-600 print:hidden pointer-fine:block">{m.rubric_keyboard_hint()}</p>
+{/if}
+
 <div class="rubric-stacked">
 	{#each teamInterviewRubricSections as section, sectionIndex (section.categoryKey)}
 		<h3 class="mt-4 border-b-2 border-gray-300 pb-1 text-sm font-bold first:mt-0">
@@ -77,7 +84,18 @@
 			{@const scoreIndex = sectionScoreOffsets[sectionIndex] + rowIndex}
 			{@const unscored = showValidationErrors && rubricScores[scoreIndex] === -1}
 			<div class="mt-3 rounded-lg border p-3" class:border-gray-300={!unscored} class:border-red-400={unscored} class:bg-red-50={unscored}>
-				<p class="text-sm font-bold">{getRubricCriterionTitle(row.messageKeyPrefix)}</p>
+				<div class="flex items-center justify-between gap-3">
+					<p class="text-sm font-bold">{getRubricCriterionTitle(row.messageKeyPrefix)}</p>
+					{#if !isSubmitted}
+						<ScoreSelect
+							bind:variable={rubricScores[scoreIndex]}
+							points={evidencePoints}
+							label={getRubricCriterionTitle(row.messageKeyPrefix)}
+							showError={showValidationErrors}
+							class="w-20 shrink-0"
+						/>
+					{/if}
+				</div>
 
 				{#if row.listenForKeys}
 					<p class="mt-1 text-xs font-semibold">{m.rubric_ti_listen_for_label()}</p>
@@ -93,6 +111,7 @@
 						{@const selected = rubricScores[scoreIndex] === level.points}
 						<button
 							type="button"
+							tabindex={-1}
 							disabled={isSubmitted}
 							aria-pressed={selected}
 							onclick={() => (rubricScores[scoreIndex] = level.points)}
@@ -193,6 +212,13 @@
 							<p class="px-1 text-lg font-semibold tabular-nums">{formatRubricScore(rubricScores[scoreIndex])}</p>
 							<p class="px-1 text-[11px] leading-tight text-gray-600">{scoredLevelDescription(rubricScores[scoreIndex])}</p>
 						{:else}
+							<ScoreSelect
+								bind:variable={rubricScores[scoreIndex]}
+								points={evidencePoints}
+								label={getRubricCriterionTitle(row.messageKeyPrefix)}
+								showError={showValidationErrors}
+								class="mx-1 mt-1"
+							/>
 							<InterviewScoringButtons bind:variable={rubricScores[scoreIndex]} showError={showValidationErrors} />
 						{/if}
 					</scoring>

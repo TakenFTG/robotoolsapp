@@ -1,8 +1,11 @@
 import type { Judge } from '@robotools.app/protocol/src/judging';
-import { JudgeGroupSchema, JudgeSchema } from '@robotools.app/protocol/src/judging';
+import { JudgeGroupSchema, JudgeNameSchema, JudgeSchema } from '@robotools.app/protocol/src/judging';
+import { AuthTokenSchema } from '@robotools.app/protocol/src/access';
+import { JudgeEmailSchema } from '@robotools.app/protocol/src/email';
+import { uuidv4 } from '@robotools.app/protocol/src/utils';
 import type { RoomState } from '@robotools.app/protocol/src/room';
 import { WRPCError } from '@robotools.app/wrpc/server/types';
-import { getEssentialData, updateEssentialData } from './essential';
+import { getEssentialData, getJudgeGroups, updateEssentialData } from './essential';
 import { getTeamData } from './team';
 import { getFinalAwardNominations } from './judging';
 import type { WRPCRootObject } from '@robotools.app/wrpc/server';
@@ -12,11 +15,11 @@ import { eq } from 'drizzle-orm';
 import z from 'zod';
 import type { ClientRouter } from '../client-router';
 import { transaction } from '../utils';
-import { assertAuthenticatedJudgeAdvisor, generateAuthToken } from '../access/tokens';
+import { assertAuthenticatedJudgeAdvisor, assertCanInviteJudges, generateAuthToken } from '../access/tokens';
 import { broadcastDeviceListUpdate } from './device';
 
 export async function getJudges(db: DatabaseOrTransaction): Promise<Judge[]> {
-	return db.select({ id: judges.id, name: judges.name, groupId: judges.groupId }).from(judges);
+	return db.select({ id: judges.id, name: judges.name, groupId: judges.groupId, isLeadJudge: judges.isLeadJudge }).from(judges);
 }
 
 export async function upsertJudge(db: DatabaseOrTransaction, judge: Judge): Promise<void> {
@@ -51,6 +54,46 @@ export function buildJudgeRoute(w: WRPCRootObject<object, ServerContext, Record<
 		getJudges: w.procedure.output(z.array(JudgeSchema)).query(async ({ ctx }) => {
 			return getJudges(ctx.db);
 		}),
+		/**
+		 * Add one judge and return their access link's token, so whoever added them can hand
+		 * it over straight away.
+		 *
+		 * Separate from updateJudge because a Lead Judge may add people but not edit them. The
+		 * server chooses the id, so this can never be aimed at an existing judge.
+		 */
+		addJudge: w.procedure
+			.input(z.object({ name: JudgeNameSchema, groupId: z.uuidv4(), email: JudgeEmailSchema.nullable().default(null) }))
+			.output(z.object({ judge: JudgeSchema, authToken: AuthTokenSchema, emailEnabled: z.boolean() }))
+			.mutation(async ({ ctx, input, session }) => {
+				if (ctx.auth.isAuthenticated()) {
+					await assertCanInviteJudges(ctx.db, ctx.auth);
+				}
+
+				const groups = await getJudgeGroups(ctx.db);
+				if (!groups.some((group) => group.id === input.groupId)) {
+					throw new WRPCError('CRITICAL: Judge group not found');
+				}
+
+				const judge = {
+					id: uuidv4(),
+					name: input.name,
+					groupId: input.groupId,
+					email: input.email?.trim().toLowerCase() || null
+				};
+				await upsertJudge(ctx.db, judge);
+
+				const [row] = await ctx.db.select({ authToken: judges.authToken }).from(judges).where(eq(judges.id, judge.id)).limit(1);
+				if (!row) {
+					throw new WRPCError('CRITICAL: Judge not found');
+				}
+
+				// Do not wait for the broadcast to complete
+				getJudges(ctx.db).then((judgesList) => {
+					session.broadcast<ClientRouter>().onAllJudgesUpdate.mutation(judgesList);
+				});
+
+				return { judge, authToken: row.authToken, emailEnabled: ctx.email.sender.enabled };
+			}),
 		updateJudge: w.procedure.input(JudgeSchema).mutation(async ({ ctx, input, session }) => {
 			if (ctx.auth.isAuthenticated()) {
 				assertAuthenticatedJudgeAdvisor(ctx.auth);

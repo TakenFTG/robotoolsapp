@@ -60,6 +60,31 @@ export const TeamDataSchema = z.object({
 
 export type TeamData = z.infer<typeof TeamDataSchema>;
 
+export const TEAM_SCREENING_NOTE_MAX_LENGTH = 280;
+
+/**
+ * A team flagged for a second interview or further discussion.
+ *
+ * Kept out of TeamData on purpose. Clients write TeamData back whole, so a device holding an
+ * older copy while scanning notebooks would silently undo a flag another judge just raised.
+ */
+export const TeamScreeningSchema = z.object({
+	teamId: z.uuidv4(),
+	/** Why the team was flagged. Empty when a judge flagged it without giving a reason. */
+	note: z.string().max(TEAM_SCREENING_NOTE_MAX_LENGTH),
+	updatedAt: z.number()
+});
+
+export type TeamScreening = z.infer<typeof TeamScreeningSchema>;
+
+export const TeamScreeningUpdateSchema = z.object({
+	teamId: z.uuidv4(),
+	/** Null when the flag was cleared. */
+	screening: TeamScreeningSchema.nullable()
+});
+
+export type TeamScreeningUpdate = z.infer<typeof TeamScreeningUpdateSchema>;
+
 export function isSubmittedNotebook(notebookDevelopmentStatus: NotebookDevelopmentStatus): boolean {
 	return notebookDevelopmentStatus === 'fully_developed' || notebookDevelopmentStatus === 'developing';
 }

@@ -183,7 +183,10 @@
 			@apply invisible;
 		}
 
-		rubric-table button {
+		rubric-table button,
+		rubric-table select,
+		.rubric-stacked select,
+		.rubric-keyboard-hint {
 			@apply hidden;
 		}
 	}

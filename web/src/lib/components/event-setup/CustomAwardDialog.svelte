@@ -3,6 +3,7 @@
 	import { dialogs } from '$lib/index.svelte';
 	import { AwardOptions, createCustomAwardOptions } from '$lib/award.svelte';
 	import Dialog from '$lib/components/dialog/Dialog.svelte';
+	import { trimBlanks } from '$lib/text';
 	import { type Program, type Grade, type AwardType, AwardTypeSchema } from '@robotools.app/protocol/src/award';
 
 	interface Props {
@@ -23,6 +24,7 @@
 	let customAwardError = $state('');
 	let hasUserInteracted = $state(false);
 	let customAwardNameInput: HTMLInputElement | null = $state(null);
+	const trimmedAwardName = $derived(trimBlanks(customAwardName));
 
 	// Auto-focus the award name input when dialog mounts
 	$effect(() => {
@@ -48,14 +50,13 @@
 
 	// Validate custom award form (pure function, no state mutation)
 	function canSubmitCustomAward() {
-		const hasName = customAwardName.trim().length > 0;
-		const hasUniqueName = !existingAwards.some((award) => award.name === customAwardName);
-		const hasLeadingTrailingWhitespace = customAwardName.length > 0 && customAwardName !== customAwardName.trim();
-		const isNameTooLong = customAwardName.trim().length > 100;
+		const hasName = trimmedAwardName.length > 0;
+		const hasUniqueName = !existingAwards.some((award) => award.name === trimmedAwardName);
+		const isNameTooLong = trimmedAwardName.length > 100;
 		const hasValidWinners = customAwardWinners > 0 && customAwardWinners <= 10000;
 		const hasGrades = customAwardGrades.length > 0;
 
-		return hasName && hasUniqueName && !hasLeadingTrailingWhitespace && !isNameTooLong && hasValidWinners && hasGrades;
+		return hasName && hasUniqueName && !isNameTooLong && hasValidWinners && hasGrades;
 	}
 
 	// Update error message reactively (only after user interaction)
@@ -65,16 +66,13 @@
 			return;
 		}
 
-		const hasName = customAwardName.trim().length > 0;
-		const hasUniqueName = !existingAwards.some((award) => award.name === customAwardName);
-		const hasLeadingTrailingWhitespace = customAwardName.length > 0 && customAwardName !== customAwardName.trim();
-		const isNameTooLong = customAwardName.trim().length > 100;
+		const hasName = trimmedAwardName.length > 0;
+		const hasUniqueName = !existingAwards.some((award) => award.name === trimmedAwardName);
+		const isNameTooLong = trimmedAwardName.length > 100;
 		const hasGrades = customAwardGrades.length > 0;
 
 		if (!hasName) {
 			customAwardError = m.award_name_is_required();
-		} else if (hasLeadingTrailingWhitespace) {
-			customAwardError = m.award_name_whitespace_error_message();
 		} else if (isNameTooLong) {
 			customAwardError = m.award_name_too_long_error_message();
 		} else if (!hasUniqueName) {
@@ -98,7 +96,7 @@
 	function addCustomAward() {
 		if (canSubmitCustomAward()) {
 			const customAward = createCustomAwardOptions(
-				customAwardName,
+				trimmedAwardName,
 				selectedProgram,
 				customAwardType,
 				customAwardGrades,

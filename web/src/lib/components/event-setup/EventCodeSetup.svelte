@@ -3,6 +3,7 @@
 	import { app, AppUI, dialogs } from '$lib/index.svelte';
 	import type { AwardOptions } from '$lib/award.svelte';
 	import RefreshIcon from '$lib/icon/RefreshIcon.svelte';
+	import { trimBlanks } from '$lib/text';
 	import {
 		getEventDivisionRankings,
 		getRobotEventsClient,
@@ -65,6 +66,8 @@
 	let inputDivisionId = $state(divisionId);
 	let isImporting = $state(false);
 	let importedData = $state<RobotEventsImportedData | null>(null);
+	// VEX Events hands over a leading space when the code is copied from its page.
+	const trimmedRobotEventsSku = $derived(trimBlanks(inputRobotEventsSku ?? ''));
 	let importChoice = $state<ImportChoice>(null);
 
 	const canProceed = $derived(importMethod === 'manual' || importedData || (robotEventsSku && robotEventsEventId && divisionId));
@@ -80,13 +83,13 @@
 			}
 		}
 
-		const searching = RobotEventsSkuSchema.parse(inputRobotEventsSku);
+		const searching = RobotEventsSkuSchema.parse(trimmedRobotEventsSku);
 
 		isImporting = true;
 
 		try {
 			const client = getRobotEventsClient();
-			const data = await importFromRobotEvents(client, searching.trim());
+			const data = await importFromRobotEvents(client, searching);
 
 			// Select first division by default
 			if (data.divisionInfos.length < 1) {
@@ -265,7 +268,7 @@
 	</div>
 
 	{#if importMethod === 'robotevents'}
-		{@const isRobotEventsSkuValid = RobotEventsSkuSchema.safeParse(inputRobotEventsSku).success}
+		{@const isRobotEventsSkuValid = RobotEventsSkuSchema.safeParse(trimmedRobotEventsSku).success}
 		<div class="flex items-end gap-2">
 			<div>
 				<!-- For public, it is called "Event Code" -->
@@ -274,6 +277,7 @@
 					type="text"
 					id="robotevents-sku"
 					bind:value={inputRobotEventsSku}
+					onblur={() => (inputRobotEventsSku = trimmedRobotEventsSku)}
 					disabled={isImporting}
 					class="classic block max-w-60"
 					placeholder="e.g., RE-VRC-23-4321"

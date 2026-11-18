@@ -3,6 +3,7 @@
 	import TrashBinIcon from '$lib/icon/TrashBinIcon.svelte';
 	import type { Judge } from '@robotools.app/protocol/src/judging';
 	import { JudgeEmailSchema } from '@robotools.app/protocol/src/email';
+	import { trimBlanks } from '$lib/text';
 
 	interface Props {
 		judge: Judge;
@@ -22,7 +23,7 @@
 	let invalid = $state(false);
 
 	function commit() {
-		const value = draft.trim();
+		const value = trimBlanks(draft);
 		if (value === '') {
 			invalid = false;
 			onSetJudgeEmail?.(judge.id, null);

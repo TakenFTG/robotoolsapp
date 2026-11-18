@@ -108,6 +108,28 @@ export function assertAuthenticatedJudgeAdvisor(auth: Authentication): void {
 }
 
 /**
+ * Allow a Judge Advisor or a Lead Judge.
+ *
+ * Reads the flag from the database on every call rather than from the connection, which is
+ * only resolved when it opens, so taking the role away applies to a device already connected.
+ */
+export async function assertCanInviteJudges(db: DatabaseOrTransaction, auth: Authentication): Promise<void> {
+	if (auth.isAuthenticatedJudgeAdvisor()) {
+		return;
+	}
+
+	const judgeId = auth.getJudgeId();
+	if (judgeId) {
+		const [judge] = await db.select({ isLeadJudge: judges.isLeadJudge }).from(judges).where(eq(judges.id, judgeId)).limit(1);
+		if (judge?.isLeadJudge) {
+			return;
+		}
+	}
+
+	throw new WRPCError('CRITICAL: Only a Judge Advisor or Lead Judge can perform this action');
+}
+
+/**
  * Bound judges must match payload judgeId (null only allowed for JA / uncontrolled).
  * Does not require authentication when AC is on — that is guaranteed by authorizeConnect
  * plus kicking all other clients when AC is toggled (see essential.updateEssentialData).

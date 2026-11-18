@@ -9,7 +9,7 @@ import {
 import type { Judge, JudgeGroup } from '@robotools.app/protocol/src/judging';
 import type { DeviceInfo } from '@robotools.app/protocol/src/client';
 import type { EssentialData } from '@robotools.app/protocol/src/event';
-import type { TeamData, TeamInfo } from '@robotools.app/protocol/src/team';
+import type { TeamData, TeamInfo, TeamScreening, TeamScreeningUpdate } from '@robotools.app/protocol/src/team';
 import type { Award } from '@robotools.app/protocol/src/award';
 import type { ServerRouter } from '@robotools.app/worker/src/server-router';
 import { clientRouter, type ClientRouter } from './client-router';
@@ -190,6 +190,7 @@ export class App {
 	private currentUser: User | null = $state(null);
 	private essentialData: EssentialData | null = $state(null);
 	private allTeamData: Record<string, TeamData> = $state({});
+	private allTeamScreenings: Record<string, TeamScreening> = $state({});
 	private allJudges: readonly Judge[] = $state([]);
 	private allDevices: readonly DeviceInfo[] = $state([]);
 	private allFinalAwardNominations: Record<string, AwardNomination[]> = $state({});
@@ -297,6 +298,7 @@ export class App {
 		this.currentUser = null;
 		this.essentialData = null;
 		this.allTeamData = {};
+		this.allTeamScreenings = {};
 		this.allJudges = [];
 		this.allDevices = [];
 		this.allFinalAwardNominations = {};
@@ -869,6 +871,7 @@ export class App {
 		this.currentUser = null;
 		this.essentialData = null;
 		this.allTeamData = {};
+		this.allTeamScreenings = {};
 		this.allJudges = [];
 		this.allDevices = [];
 		this.allFinalAwardNominations = {};
@@ -1119,11 +1122,37 @@ export class App {
 		await this.updateJudgeGroups(this.getAllJudgeGroups().filter((group) => group.id !== groupId));
 	}
 
-	/** Add a judge to a group. Their access link is minted server-side. */
-	async addJudge(name: string, groupId: string): Promise<Judge> {
-		const judge: Judge = { id: generateUUID(), name, groupId };
-		await this.wrpcClient.judge.updateJudge.mutation(judge);
-		return judge;
+	/** Add a judge to a group. Their access link is minted server-side and returned here. */
+	addJudge(name: string, groupId: string, email: string | null = null) {
+		return this.wrpcClient.judge.addJudge.mutation({ name, groupId, email });
+	}
+
+	/** Whether this device may add judges and hand out their links. */
+	canInviteJudges(): boolean {
+		if (!this.isAccessControlEnabled() || !this.currentUser) return false;
+		if (this.currentUser.role === 'judge_advisor') return true;
+		const judgeId = this.currentUser.judge.id;
+		return this.allJudges.some((judge) => judge.id === judgeId && judge.isLeadJudge);
+	}
+
+	// ============================================================================
+	// Team Screening
+	// ============================================================================
+
+	getTeamScreening(teamId: string): Readonly<TeamScreening> | null {
+		return this.allTeamScreenings[teamId] ?? null;
+	}
+
+	handleAllTeamScreeningsUpdate(screenings: readonly TeamScreening[]): void {
+		this.allTeamScreenings = Object.fromEntries(screenings.map((screening) => [screening.teamId, screening]));
+	}
+
+	handleTeamScreeningUpdate({ teamId, screening }: TeamScreeningUpdate): void {
+		if (screening) {
+			this.allTeamScreenings[teamId] = screening;
+		} else {
+			delete this.allTeamScreenings[teamId];
+		}
 	}
 
 	/** Rename a judge, or move them to a different group. */

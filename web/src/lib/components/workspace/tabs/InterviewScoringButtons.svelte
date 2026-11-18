@@ -5,11 +5,9 @@
 	/**
 	 * Scoring for one interview criterion.
 	 *
-	 * Buttons rather than the notebook rubric's slider, because v2.0 asks a judge to pick
-	 * one of three named descriptions of what they heard. At that granularity the name is
-	 * the useful thing and the number is incidental — a three-stop slider would hide the
-	 * wording behind a position, which is exactly backwards for a rubric whose whole
-	 * method is "score what you heard".
+	 * Buttons because v2.0 asks a judge to pick one of three named descriptions of what they
+	 * heard, so the wording has to stay in view. They sit outside the Tab order: the score
+	 * dropdown beside them is the keyboard route.
 	 */
 	let {
 		variable = $bindable(),
@@ -26,6 +24,7 @@
 	{#each teamInterviewEvidenceLevels as level (level.points)}
 		<button
 			type="button"
+			tabindex={-1}
 			class="flex items-center justify-between gap-1 rounded border px-1.5 py-1 text-left text-[11px] leading-tight"
 			class:border-primary={variable === level.points}
 			class:bg-primary={variable === level.points}

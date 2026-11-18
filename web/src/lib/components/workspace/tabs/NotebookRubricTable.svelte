@@ -10,7 +10,7 @@
 		type ProficiencyLevel
 	} from '$lib/rubric-messages';
 	import { scrollSync } from '$lib/scroll-sync.svelte';
-	import ScoringSlider from './ScoringSlider.svelte';
+	import ScoreSelect from './ScoreSelect.svelte';
 
 	interface Props {
 		rubricScores: number[];
@@ -68,15 +68,22 @@
 	iPad portrait fares better at about three quarters and is still cut off.
 
 	So below `lg` there is no table at all. Each criterion becomes a card and the four
-	proficiency levels become full-width rows you tap to score, which also retires the
-	four-stop slider — the hardest possible control to hit accurately on a phone. It is the
-	same shape the v2.0 interview rubric already uses, for the same reason: the judge is
-	choosing between descriptions, so the descriptions should be the thing they touch.
+	proficiency levels become full-width rows you tap to score. It is the same shape the
+	v2.0 interview rubric already uses, for the same reason: the judge is choosing between
+	descriptions, so the descriptions should be the thing they touch.
+
+	Both views keep the level buttons out of the Tab order, so Tab goes from one score
+	dropdown to the next. A laptop with the notebook open beside the rubric lands in this
+	view too, and needs the same keyboard route as the table.
 
 	Two renderings of one config rather than one rendering that reflows. The table has a
 	structure — fixed columns either side of a scroller — that does not become this by
 	changing flex direction, and pretending otherwise would produce something that is neither.
 -->
+{#if !isSubmitted}
+	<p class="rubric-keyboard-hint mb-2 hidden text-xs text-gray-600 print:hidden pointer-fine:block">{m.rubric_keyboard_hint()}</p>
+{/if}
+
 <div class="rubric-stacked">
 	{#each notebookRubricSections as section, sectionIndex (section.categoryKey)}
 		<h3 class="mt-4 border-b-2 border-gray-300 pb-1 text-sm font-bold first:mt-0">
@@ -87,7 +94,18 @@
 			{@const scoreIndex = sectionScoreOffsets[sectionIndex] + rowIndex}
 			{@const unscored = showValidationErrors && rubricScores[scoreIndex] === -1}
 			<div class="mt-3 rounded-lg border p-3" class:border-gray-300={!unscored} class:border-red-400={unscored} class:bg-red-50={unscored}>
-				<p class="text-sm font-bold">{getRubricCriterionTitle(row.messageKeyPrefix)}</p>
+				<div class="flex items-center justify-between gap-3">
+					<p class="text-sm font-bold">{getRubricCriterionTitle(row.messageKeyPrefix)}</p>
+					{#if !isSubmitted}
+						<ScoreSelect
+							bind:variable={rubricScores[scoreIndex]}
+							points={levelPoints(row)}
+							label={getRubricCriterionTitle(row.messageKeyPrefix)}
+							showError={showValidationErrors}
+							class="w-20 shrink-0"
+						/>
+					{/if}
+				</div>
 
 				<div class="mt-2 flex flex-col gap-2">
 					{#each levelPoints(row) as points, levelIndex (points)}
@@ -95,6 +113,7 @@
 						{@const selected = rubricScores[scoreIndex] === points}
 						<button
 							type="button"
+							tabindex={-1}
 							disabled={isSubmitted}
 							aria-pressed={selected}
 							onclick={() => (rubricScores[scoreIndex] = points)}
@@ -161,7 +180,7 @@
 			</row>
 			<row class="section-header-row">
 				<criteria class="max-w-42 min-w-42 bg-gray-400 font-bold">{m.rubric_criteria()}</criteria>
-				<scroll-container use:registerScrollContainer>
+				<scroll-container use:registerScrollContainer tabindex="-1">
 					<content class="min-w-160 bg-gray-200">
 						{#each proficiencyLevels as level (level)}
 							<div class="text-center font-bold">
@@ -178,10 +197,24 @@
 					<criteria class="max-w-42 min-w-42 font-bold">
 						<p class="text-sm">{getRubricCriterionTitle(row.messageKeyPrefix)}</p>
 					</criteria>
-					<scroll-container use:registerScrollContainer>
+					<scroll-container use:registerScrollContainer tabindex="-1">
 						<content class="min-w-160">
-							{#each proficiencyLevels as level (level)}
-								<div>{getRubricProficiencyText(row.messageKeyPrefix, level)}</div>
+							{#each levelPoints(row) as points, levelIndex (points)}
+								{@const level = proficiencyLevels[levelIndex]}
+								{@const selected = rubricScores[scoreIndex] === points}
+								<button
+									type="button"
+									tabindex={-1}
+									disabled={isSubmitted}
+									aria-pressed={selected}
+									onclick={() => (rubricScores[scoreIndex] = points)}
+									class="flex min-w-0 items-start text-left disabled:cursor-default"
+									class:bg-primary={selected}
+									class:text-on-primary={selected}
+									class:hover:bg-gray-100={!selected && !isSubmitted}
+								>
+									<span>{getRubricProficiencyText(row.messageKeyPrefix, level)}</span>
+								</button>
 							{/each}
 						</content>
 					</scroll-container>
@@ -189,11 +222,12 @@
 						{#if isSubmitted}
 							<p class="text-lg tabular-nums">{formatRubricScore(rubricScores[scoreIndex])}</p>
 						{:else}
-							<ScoringSlider
+							<ScoreSelect
 								bind:variable={rubricScores[scoreIndex]}
-								max={row.maxPoints}
-								min={row.minPoints ?? 0}
+								points={levelPoints(row)}
+								label={getRubricCriterionTitle(row.messageKeyPrefix)}
 								showError={showValidationErrors}
+								class="w-20"
 							/>
 						{/if}
 					</scoring>

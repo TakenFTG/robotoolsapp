@@ -1,8 +1,8 @@
 <script lang="ts">
 	import { m } from '$lib/paraglide/messages.js';
 	import Dialog from '$lib/components/dialog/Dialog.svelte';
-	import { dialogs } from '$lib/index.svelte';
-	import { canUseClipboard } from '$lib/utils.svelte';
+	import { app, dialogs } from '$lib/index.svelte';
+	import { canUseClipboard, errorToString } from '$lib/utils.svelte';
 	import { generateQrCodeDataUrl } from '$lib/qrcode';
 	import XmarkIcon from '$lib/icon/XmarkIcon.svelte';
 
@@ -39,9 +39,32 @@
 		audience?: 'handover' | 'self';
 		/** Whose it is. Required for `handover`, where the whole message is who it belongs to. */
 		name?: string;
+		/** Offers to email the link to this judge. Nothing is sent until the button is pressed. */
+		emailTo?: { judgeId: string; address: string };
 	}
 
-	let { link, audience = 'handover', name }: Props = $props();
+	let { link, audience = 'handover', name, emailTo }: Props = $props();
+
+	let sending = $state(false);
+	let emailResult = $state<{ text: string; isError: boolean } | null>(null);
+
+	async function sendEmail() {
+		if (!emailTo) return;
+		sending = true;
+		emailResult = null;
+		try {
+			const { results } = await app.wrpcClient.access.sendAccessLinkEmails.mutation({ judgeIds: [emailTo.judgeId] });
+			const result = results[0];
+			emailResult =
+				result?.outcome === 'sent'
+					? { text: m.email_access_link_sent({ email: emailTo.address }), isError: false }
+					: { text: result?.error ?? m.email_outcome_failed(), isError: true };
+		} catch (error) {
+			emailResult = { text: errorToString(error), isError: true };
+		} finally {
+			sending = false;
+		}
+	}
 
 	const heading = $derived(audience === 'self' ? m.save_your_access_link() : m.access_link_for({ name: name ?? '' }));
 	const description = $derived(
@@ -123,5 +146,18 @@
 				<p class="mt-2 text-xs text-gray-500">{m.access_link_no_clipboard()}</p>
 			{/if}
 		</div>
+
+		{#if emailTo}
+			<div>
+				<button type="button" class="lightweight tiny" onclick={sendEmail} disabled={sending}>
+					{sending ? '…' : m.email_access_link_to({ email: emailTo.address })}
+				</button>
+				{#if emailResult}
+					<p class="mt-2 text-xs" class:text-red-600={emailResult.isError} class:text-green-700={!emailResult.isError}>
+						{emailResult.text}
+					</p>
+				{/if}
+			</div>
+		{/if}
 	</div>
 </Dialog>

@@ -7,6 +7,7 @@ import {
 	SubmissionCacheSchema,
 	TeamInterviewNoteSchema,
 	TeamInterviewRubricSchema,
+	TeamInterviewScoreSchema,
 	sumRubricScores
 } from '@robotools.app/protocol/src/rubric';
 import type {
@@ -401,6 +402,14 @@ export function buildJudgingRoute(w: WRPCRootObject<object, ServerContext, Recor
 				const result = await ctx.db.select().from(teamInterviewRubrics).where(eq(teamInterviewRubrics.id, input.id));
 				return result[0] as TeamInterviewRubric;
 			}),
+
+		/** Every interview rubric's total, across all judge groups. */
+		getTeamInterviewScores: w.procedure.output(z.array(TeamInterviewScoreSchema)).query(async ({ ctx }) => {
+			const rows = await ctx.db
+				.select({ teamId: teamInterviewRubrics.teamId, rubric: teamInterviewRubrics.rubric })
+				.from(teamInterviewRubrics);
+			return rows.map((row) => ({ teamId: row.teamId, score: sumRubricScores(row.rubric as number[]) }));
+		}),
 
 		completeTeamInterviewNote: w.procedure
 			.input(

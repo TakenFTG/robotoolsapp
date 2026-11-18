@@ -176,6 +176,17 @@
 			.catch((error) => console.error('Failed to load ref notes:', error));
 	});
 
+	// Flags raised while this device was away arrive with the reload after a reconnect.
+	$effect(() => {
+		if (!isJudgingReady) return;
+		void app.getReconnectionCount();
+
+		app.wrpcClient.team.getTeamScreenings
+			.query()
+			.then((screenings) => app.handleAllTeamScreeningsUpdate(screenings))
+			.catch((error) => console.error('Failed to load team screenings:', error));
+	});
+
 	$effect(() => {
 		if (!isJudgingReady) return;
 		// Read so this runs again after a reconnect: the server dropped our subscriptions.

@@ -2,6 +2,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { type TeamInfoAndData } from './team.svelte';
 import { type Judge } from '@robotools.app/protocol/src/judging';
 import { JudgeEmailSchema } from '@robotools.app/protocol/src/email';
+import { trimBlanks } from './text';
 
 export class EditingJudgeGroup {
 	public readonly id: string;
@@ -43,12 +44,12 @@ export function createJudge(id: string, name: string, groupId: string, email: st
  * dropped — a judge with a comma in their name should end up mis-punctuated, not missing.
  */
 export function parseJudgeEntry(line: string): { name: string; email: string | null } {
-	const trimmed = line.trim();
+	const trimmed = trimBlanks(line);
 
 	const angled = /^(.*?)\s*<([^<>]+)>$/.exec(trimmed);
 	if (angled) {
-		const name = angled[1]!.trim();
-		const email = angled[2]!.trim();
+		const name = trimBlanks(angled[1]!);
+		const email = trimBlanks(angled[2]!);
 		if (name && JudgeEmailSchema.safeParse(email).success) {
 			return { name, email };
 		}
@@ -56,8 +57,8 @@ export function parseJudgeEntry(line: string): { name: string; email: string | n
 
 	const lastComma = trimmed.lastIndexOf(',');
 	if (lastComma > 0) {
-		const name = trimmed.slice(0, lastComma).trim();
-		const email = trimmed.slice(lastComma + 1).trim();
+		const name = trimBlanks(trimmed.slice(0, lastComma));
+		const email = trimBlanks(trimmed.slice(lastComma + 1));
 		if (name && JudgeEmailSchema.safeParse(email).success) {
 			return { name, email };
 		}
@@ -68,7 +69,8 @@ export function parseJudgeEntry(line: string): { name: string; email: string | n
 
 export function createJudgeFromString(entry: string, groupId: string): Judge {
 	const { name, email } = parseJudgeEntry(entry);
-	return createJudge(uuidv4(), name.slice(0, 100), groupId, email);
+	// Trimmed again because the cut can land just after a space.
+	return createJudge(uuidv4(), trimBlanks(name.slice(0, 100)), groupId, email);
 }
 
 export function parseJudgeNamesFromInput(input: string): string[] {
