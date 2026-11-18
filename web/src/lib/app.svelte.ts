@@ -1471,12 +1471,42 @@ export class App {
 				if (state === 'connected') {
 					if (this.hasConnected) {
 						this.reconnections++;
+						void this.refreshRoomStateAfterReconnect();
 					}
 					this.hasConnected = true;
 				}
 				this.connectionState = state;
 			}
 		};
+	}
+
+	/**
+	 * Catch up on everything broadcast while the connection was down.
+	 *
+	 * The subscriptions in Workspace fetch their own data again, but the event setup, teams,
+	 * judges and final nominations only ever arrive as broadcasts. Without this a device came
+	 * back showing "Connected" over a stale roster, and only a page refresh corrected it.
+	 *
+	 * Failure is left quiet: the socket that carried this has gone again, and the next
+	 * reconnect repeats it.
+	 */
+	private async refreshRoomStateAfterReconnect(): Promise<void> {
+		const roomId = this.permit?.roomId;
+		if (!roomId) {
+			return;
+		}
+
+		try {
+			const joiningKit = await this.wrpcClient.handshake.joinJudgesRoom.mutation();
+			// The user may have switched events while this was in flight.
+			if (this.permit?.roomId !== roomId) {
+				return;
+			}
+			this.handleEventSetupUpdate(joiningKit);
+			this.handleClientAuthenticationChange(joiningKit.authentication);
+		} catch (error) {
+			console.warn('Could not refresh the room after reconnecting:', error);
+		}
 	}
 
 	/**

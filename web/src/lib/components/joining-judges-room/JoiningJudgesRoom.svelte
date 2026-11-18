@@ -8,9 +8,8 @@
 		if (app.hasEssentialData()) {
 			const currentUser = app.getCurrentUser();
 			if (currentUser) {
-				if (!app.isAccessControlEnabled()) {
-					void app.selectUser(currentUser);
-				}
+				// Only ever read here. The role saved on this device is a copy from when it was
+				// chosen, so writing it back would undo any roster change made since.
 				AppUI.appPhase = 'workspace';
 			} else if (app.isAccessControlEnabled()) {
 				// Access control requires a personal link; role picker is unavailable.

@@ -742,6 +742,10 @@ export function createServer(options: ServerOptions): { server: http.Server; hub
 			// single bad open took the process down and every other room with it.
 			try {
 				const room = hub.room(intention.data.roomId);
+				// Before queueing for the lock, not once it is held. The client sends its first
+				// frame as soon as the socket opens, and until attach wires up a listener that
+				// frame would be delivered to nobody.
+				ws.pause();
 				void room.mutex
 					.run(() =>
 						room.attach(ws, {
@@ -753,6 +757,8 @@ export function createServer(options: ServerOptions): { server: http.Server; hub
 					)
 					.catch((error) => {
 						console.error('Failed to attach WebSocket:', error);
+						// A paused socket never reads the client's half of the close.
+						ws.resume();
 						ws.close();
 					});
 			} catch (error) {
@@ -777,6 +783,8 @@ export function createServer(options: ServerOptions): { server: http.Server; hub
 					ws.close(ConnectionCloseCode.KICKED, RefCloseReason.ROOM_NOT_FOUND);
 					return;
 				}
+				// Paused before queueing for the lock, for the same reason as a Judges' Room above.
+				ws.pause();
 				void room.mutex
 					.run(() =>
 						room.attach(ws, {
@@ -788,6 +796,7 @@ export function createServer(options: ServerOptions): { server: http.Server; hub
 					)
 					.catch((error) => {
 						console.error('Failed to attach ref WebSocket:', error);
+						ws.resume();
 						ws.close();
 					});
 			} catch (error) {

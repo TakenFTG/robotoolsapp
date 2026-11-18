@@ -107,8 +107,10 @@ export function buildGroupRoute(w: WRPCRootObject<object, ServerContext, Record<
 
 				await setRoomGroupId(ctx.db, groupId);
 
+				// Not awaited: this request holds the room's lock, and every judge in the room would
+				// wait on the mail server. It is best-effort and swallows its own failures.
 				if (identity.email) {
-					await emailGroupAdvisorTheirLink(ctx, {
+					void emailGroupAdvisorTheirLink(ctx, {
 						to: identity.email,
 						advisorName: identity.name,
 						groupName: input.name,

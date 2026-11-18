@@ -222,15 +222,13 @@ export class Room {
 	 * A refused connection is accepted and then closed with a readable reason rather than
 	 * rejected at the HTTP layer, because browser JavaScript cannot read a status code
 	 * from a failed WebSocket upgrade — it can read a close reason.
+	 *
+	 * The caller must have paused `raw` before queueing for the room's lock. The client sends
+	 * its first frame as soon as the socket opens, and without a listener that frame is lost
+	 * and the connection hangs looking perfectly healthy. Reading resumes at the end of this.
 	 */
 	async attach(raw: NodeWebSocket, intention: ConnectIntention): Promise<void> {
 		const socket = adaptSocket(raw);
-
-		// The socket is already open and the client sends its first frame immediately, but
-		// deciding whether to admit it means reading the database. Pause until the handlers
-		// below are wired, or that first message is delivered to nobody and the connection
-		// hangs looking perfectly healthy.
-		raw.pause();
 
 		const connectAuth = await this.network.authorizeConnect(intention.deviceId, intention.auth, this.roomId);
 

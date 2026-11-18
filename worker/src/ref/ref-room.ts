@@ -203,10 +203,11 @@ export class RefRoom {
 	 *
 	 * Refusals are an accepted socket closed with a readable reason, because browser code
 	 * cannot read the status of a failed upgrade but can read a close reason.
+	 *
+	 * The caller must have paused `raw` before queueing for the room's lock; see Room.attach.
 	 */
 	async attach(raw: NodeWebSocket, intention: RefConnectIntention): Promise<void> {
 		const socket = adaptSocket(raw);
-		raw.pause();
 
 		const admission = await this.admit(intention.auth);
 		if (!admission.allowed) {
