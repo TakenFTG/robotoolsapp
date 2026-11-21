@@ -6,6 +6,7 @@
 	import Button from '$lib/components/m3/Button.svelte';
 	import Chip from '$lib/components/m3/Chip.svelte';
 	import SeveritySummary from './SeveritySummary.svelte';
+	import { currentMatchIndex } from '$lib/ref/current-match';
 
 	interface Props {
 		onLog: (preset: IncidentPreset) => void;
@@ -25,6 +26,9 @@
 	 * drawing them all makes a phone crawl; refs want what is coming up next.
 	 */
 	const PAGE_SIZE = 40;
+	/** Earlier matches kept above the current one, so a ref can see what just finished. */
+	const LOOKBACK = 2;
+	let start = $state(0);
 	let limit = $state(PAGE_SIZE);
 
 	const hasSchedule = $derived(refApp.hasScheduleSource);
@@ -41,23 +45,59 @@
 
 	const fields = $derived([...new Set(allMatches.map((match) => match.field).filter((name): name is string => !!name))].sort());
 
-	const shown: Row[] = $derived(
+	const inScope: Row[] = $derived(
 		allMatches
 			.filter((match) => divisionId === 'all' || match.divisionId === divisionId)
 			.filter((match) => field === 'all' || match.field === field)
-			.filter((match) => showPlayed || !match.scored)
 			.sort((a, b) => (a.scheduledAt ?? '').localeCompare(b.scheduledAt ?? '') || a.round - b.round || a.matchnum - b.matchnum)
 	);
+	const shown: Row[] = $derived(showPlayed ? inScope : inScope.filter((match) => !match.scored));
 
-	const visible = $derived(shown.slice(0, limit));
+	/** The match on the field now (or next up), as an index into `shown`; see `currentMatchIndex`. */
+	const current = $derived(
+		currentMatchIndex(
+			shown,
+			inScope.some((match) => match.scored),
+			Date.now()
+		)
+	);
+	const currentKey = $derived(current >= 0 ? rowKey(shown[current]) : null);
 
-	// A new filter starts from the top of its own list.
+	const visible = $derived(shown.slice(start, start + limit));
+
+	function rowKey(match: Row) {
+		return `${match.divisionId}-${match.id}`;
+	}
+
+	let anchoredFor = '';
+	let listEl = $state<HTMLElement>();
+
+	/**
+	 * Open on the current match rather than the first of the day. Runs once per filter (and
+	 * once when the schedule first arrives), so a background refresh or a ref scrolling back
+	 * through earlier matches isn't yanked to the bottom.
+	 */
 	$effect(() => {
-		void divisionId;
-		void field;
-		void showPlayed;
+		const filterKey = `${divisionId}|${field}|${showPlayed}`;
+		if (shown.length === 0 || anchoredFor === filterKey) return;
+		anchoredFor = filterKey;
+		// Once everything is over, open on the last page: the end of the day is what's relevant.
+		const index = current >= 0 ? current : Math.max(0, shown.length - PAGE_SIZE + LOOKBACK);
+		start = Math.max(0, index - LOOKBACK);
 		limit = PAGE_SIZE;
+		const key = start > 0 ? currentKey : null;
+		requestAnimationFrame(() => {
+			if (!key || !listEl) return;
+			const card = listEl.querySelector<HTMLElement>(`[data-match="${CSS.escape(key)}"]`);
+			card?.scrollIntoView({ block: 'start' });
+		});
 	});
+
+	function showEarlier() {
+		const earlier = Math.max(0, start - PAGE_SIZE);
+		limit += start - earlier;
+		start = earlier;
+	}
 
 	async function refresh() {
 		refreshError = '';
@@ -145,16 +185,28 @@
 
 		<p class="text-body-small text-on-surface-variant">{m.ref_matches_hint()}</p>
 
-		<div class="flex flex-col gap-2">
-			{#each visible as match (`${match.divisionId}-${match.id}`)}
+		<div class="flex flex-col gap-2" bind:this={listEl}>
+			{#if start > 0}
+				<Button variant="outlined" onclick={showEarlier}>
+					{m.ref_show_earlier({ count: start })}
+				</Button>
+			{/if}
+			{#each visible as match (rowKey(match))}
+				{@const isCurrent = rowKey(match) === currentKey}
 				<article
+					data-match={rowKey(match)}
+					aria-current={isCurrent ? 'true' : undefined}
 					class={[
-						'flex flex-col gap-2 rounded-xl border border-outline-variant p-3',
+						'flex scroll-mt-36 flex-col gap-2 rounded-xl border p-3',
+						isCurrent ? 'border-2 border-primary' : 'border-outline-variant',
 						match.scored ? 'bg-surface-container-low' : 'bg-surface-container-lowest'
 					]}
 				>
 					<div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
 						<span class="text-title-medium text-on-surface">{match.name}</span>
+						{#if isCurrent}
+							<span class="rounded-full bg-primary px-2 py-0.5 text-label-small text-on-primary">{m.ref_match_now()}</span>
+						{/if}
 						{#if match.field}<span class="text-body-medium text-on-surface-variant">{match.field}</span>{/if}
 						{#if match.scheduledAt}<span class="text-body-medium text-on-surface-variant">{formatTime(Date.parse(match.scheduledAt))}</span
 							>{/if}
@@ -178,9 +230,9 @@
 					{refApp.matches === null ? m.loading() : allMatches.length === 0 ? m.ref_schedule_empty() : m.ref_all_played()}
 				</p>
 			{/each}
-			{#if shown.length > visible.length}
+			{#if shown.length > start + visible.length}
 				<Button variant="outlined" onclick={() => (limit += PAGE_SIZE)}>
-					{m.ref_show_more({ shown: visible.length, total: shown.length })}
+					{m.ref_show_more({ shown: start + visible.length, total: shown.length })}
 				</Button>
 			{/if}
 		</div>

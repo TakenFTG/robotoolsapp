@@ -1065,6 +1065,8 @@
 	"ref_qr_description": "Scan with the ref's phone camera. This link is personal to them.",
 	"ref_done": "Done",
 	"ref_show_more": "Show more (showing {shown} of {total})",
+	"ref_show_earlier": "Show earlier matches ({count})",
+	"ref_match_now": "Now",
 	"ref_email_all_links": "Email all links",
 	"ref_email_all_links_confirm": "Email every ref who has an address their own link? Each link signs that ref in, so check the addresses first.",
 	"ref_email_link_confirm": "Email {name} their link at {email}?",
