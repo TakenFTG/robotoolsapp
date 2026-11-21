@@ -3,7 +3,6 @@
 	import JudgeAdvisorStep from './JudgeAdvisorStep.svelte';
 	import CompetitionSetupStep from './CompetitionSetupStep.svelte';
 	import AwardSelectionStep from './AwardSelectionStep.svelte';
-	import TeamGroupsStep from './TeamGroupsStep.svelte';
 	import JudgeSetupStep from './JudgeSetupStep.svelte';
 	import { onMount } from 'svelte';
 	import { app, AppUI, dialogs } from '$lib/index.svelte';
@@ -21,12 +20,16 @@
 	let currentStep = $state(0);
 	let judgeAdvisorName = $state('');
 	let judgeAdvisorEmail = $state('');
-	// Six steps since the Judge Advisor step was added at the front. It asks who is running
-	// the event, which nothing used to ask: the first advisor was created anonymously.
+	// The Judge Advisor step at the front asks who is running the event, which nothing used
+	// to ask: the first advisor was created anonymously.
 
 	let isEditingEventSetup = $state(false);
 
-	// Six steps when creating an event, five when editing one.
+	// Five steps when creating an event, four when editing one.
+	//
+	// There is no step for team groups. Each team's group comes from its number when the
+	// teams are imported (1234A and 1234B both land in 1234), and that guess is good enough
+	// for the one place groups are shown: the award winner summary.
 	//
 	// The Judge Advisor step at the front asks who is running the event and where to send
 	// their link. Both are answered once, at creation: an existing event already has an
@@ -34,9 +37,9 @@
 	// walking back through setup. Showing it while editing would offer a field that
 	// silently does nothing.
 	const firstStep = $derived(isEditingEventSetup ? 2 : 1);
-	const totalSteps = $derived(isEditingEventSetup ? 5 : 6);
+	const totalSteps = $derived(isEditingEventSetup ? 4 : 5);
 	/** Absolute number of the final step; the award step is always last. */
-	const lastStep = 6;
+	const lastStep = 5;
 	/**
 	 * Access control is not optional for a new room.
 	 *
@@ -359,8 +362,6 @@
 					onPrev={prevStep}
 				/>
 			{:else if currentStep === 4}
-				<TeamGroupsStep bind:teams onNext={nextStep} onPrev={prevStep} />
-			{:else if currentStep === 5}
 				<JudgeSetupStep
 					{isEditingEventSetup}
 					{teams}
@@ -371,8 +372,8 @@
 					onNext={nextStep}
 					onPrev={prevStep}
 				/>
-			{:else if currentStep === 6}
-				<!-- The last step. There was a sixth for "other settings", but the only setting
+			{:else if currentStep === 5}
+				<!-- The last step. There was another for "other settings", but the only setting
 				     on it was whether to turn access control on, and that is no longer a
 				     question — so completing the setup happens here. -->
 				<AwardSelectionStep

@@ -180,20 +180,6 @@ export function mapGradeToGradeLevel(gradeString: string): Grade {
 	return 'College';
 }
 
-export function groupTeamsByGroup(teamList: TeamInfoAndData[]): Record<string, TeamInfoAndData[]> {
-	const groups: Record<string, TeamInfoAndData[]> = {};
-
-	teamList.forEach((team) => {
-		const groupName = team.group || 'Ungrouped';
-		if (!groups[groupName]) {
-			groups[groupName] = [];
-		}
-		groups[groupName].push(team);
-	});
-
-	return groups;
-}
-
 export function sortByTeamNumber(teams: Readonly<TeamInfoAndData>[]) {
 	return [...teams].sort((a, b) => {
 		const aIsStartWithDigit = /[0-9]/.test(a.number);

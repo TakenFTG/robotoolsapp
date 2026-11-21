@@ -308,7 +308,7 @@
 			class:cursor-not-allowed={!canProceed}
 			disabled={!canProceed}
 		>
-			{m.next_team_groups()}
+			{m.next_judge_setup()}
 		</button>
 	</div>
 </div>
