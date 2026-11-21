@@ -1,4 +1,5 @@
 import type { EssentialData } from '@robotools.app/protocol/src/event';
+import { announceAudit, recordAudit } from '../audit/log';
 import { EssentialDataSchema } from '@robotools.app/protocol/src/event';
 import { awards, judgeGroups, judgeGroupsAssignedTeams, metadata, teams } from '../db/schema';
 import type { DatabaseOrTransaction, ServerContext } from '../server-router';
@@ -278,6 +279,15 @@ export function buildEssentialRoute(w: WRPCRootObject<object, ServerContext, Rec
 			}
 
 			await updateEssentialData(ctx.db, input);
+			announceAudit(ctx.db, session, [
+				await recordAudit(ctx.db, ctx.auth, session, {
+					action: 'event_setup_changed',
+					details:
+						wasAccessControlEnabled !== input.accessControlEnabled
+							? { before: wasAccessControlEnabled, after: input.accessControlEnabled }
+							: {}
+				})
+			]);
 
 			// An event renamed mid-weekend should not stay listed under its old name.
 			await syncRoomRegistration(ctx);

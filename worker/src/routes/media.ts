@@ -16,6 +16,8 @@ import { z } from 'zod';
 import type { ClientRouter } from '../client-router';
 import { assertAuthorship } from '../access/tokens';
 import { pendingPhotoUploads, teamPhotos, teams } from '../db/schema';
+import { announceAudit, getDeviceName, getJudgeName, recordAudit, writeAudit } from '../audit/log';
+import type { ClientSource } from './subscriptions';
 import { PHOTO_CACHE_MAX_AGE_SECONDS, timingSafeEqualString, UPLOAD_TOKEN_TTL_MS } from '../media/constants';
 import type { PhotosObjectBody } from '../media/types';
 import type { DatabaseOrTransaction, ServerContext } from '../server-router';
@@ -138,6 +140,7 @@ export function buildMediaRoute(w: WRPCRootObject<object, ServerContext, Record<
 			// Drop the DB row first so clients stop listing the photo even if R2/purge fails.
 			await ctx.db.delete(teamPhotos).where(eq(teamPhotos.id, input.photoId));
 			await ctx.photos.delete(photo.id);
+			announceAudit(ctx.db, session, [await recordAudit(ctx.db, ctx.auth, session, { action: 'photo_deleted', teamId: photo.teamId })]);
 
 			session.broadcast<ClientRouter>().onTeamPhotoUpdate.mutation({
 				action: 'deleted',
@@ -154,7 +157,9 @@ export async function completePhotoUpload(
 	ctx: ServerContext,
 	token: string,
 	body: ArrayBuffer,
-	contentTypeHeader: string | null
+	contentTypeHeader: string | null,
+	/** Where to announce the activity log entry. Omitted by callers with nobody to tell. */
+	source?: ClientSource
 ): Promise<TeamPhoto> {
 	await cleanupExpiredUploadTokens(ctx.db);
 
@@ -226,6 +231,25 @@ export async function completePhotoUpload(
 		// Avoid orphaning the stored bytes if the metadata writes fail after put.
 		await ctx.photos.delete(pending.photoId).catch(() => {});
 		throw error;
+	}
+
+	// The upload arrives over plain HTTP with only a token, so who sent it is what was
+	// recorded when the token was handed out. That request was checked against the
+	// connection's access link, so the judge is as reliable as access control makes it.
+	const verified = await ctx.network.isAccessControlEnabled();
+	const audit = await writeAudit(
+		ctx.db,
+		{
+			role: pending.createdByJudgeId ? 'judge' : null,
+			id: pending.createdByJudgeId,
+			name: pending.createdByJudgeId ? await getJudgeName(ctx.db, pending.createdByJudgeId) : null,
+			verified: verified && !!pending.createdByJudgeId
+		},
+		{ deviceId: pending.createdByDeviceId, deviceName: await getDeviceName(ctx.db, pending.createdByDeviceId) },
+		{ action: 'photo_uploaded', teamId: pending.teamId }
+	);
+	if (source) {
+		announceAudit(ctx.db, source, [audit]);
 	}
 
 	return toTeamPhoto({

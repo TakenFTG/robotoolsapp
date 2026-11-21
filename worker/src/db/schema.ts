@@ -370,3 +370,39 @@ export const pendingPhotoUploads = sqliteTable('PendingPhotoUploads', {
 	createdByJudgeId: text('createdByJudgeId'),
 	expiresAt: integer('expiresAt', { mode: 'timestamp' }).notNull()
 });
+
+/**
+ * The activity log a Judge Advisor reads to see who did what (see protocol/src/audit.ts).
+ *
+ * Deliberately without foreign keys. Every other table here cascades away when a judge or
+ * team is removed, and a record that forgets the person it is about the moment they are
+ * deleted is not a record. Names are copied in for the same reason.
+ *
+ * `coalesceKey` lets a burst of the same change, such as clicking through ranks on one
+ * team, collapse into one entry rather than five. Null for anything that should never be
+ * merged.
+ */
+export const auditLog = sqliteTable(
+	'AuditLog',
+	{
+		id: integer('id').primaryKey({ autoIncrement: true }),
+		timestamp: integer('timestamp').notNull(),
+		actorRole: text('actorRole', { enum: ['judge_advisor', 'judge'] }),
+		actorId: text('actorId'),
+		actorName: text('actorName'),
+		verified: integer('verified', { mode: 'boolean' }).notNull(),
+		deviceId: text('deviceId').notNull(),
+		deviceName: text('deviceName').notNull(),
+		action: text('action').notNull(),
+		teamId: text('teamId'),
+		teamNumber: text('teamNumber'),
+		awardName: text('awardName'),
+		details: text('details', { mode: 'json' }).notNull(),
+		coalesceKey: text('coalesceKey')
+	},
+	(table) => [
+		index('audit_log_actorId').on(table.actorId),
+		index('audit_log_teamId').on(table.teamId),
+		index('audit_log_coalesceKey').on(table.coalesceKey)
+	]
+);

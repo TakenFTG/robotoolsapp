@@ -13,6 +13,7 @@ import {
 import { AwardNameSchema } from '@robotools.app/protocol/src/award';
 import { TeamPhotoUpdateSchema } from '@robotools.app/protocol/src/media';
 import { RoomStateSchema } from '@robotools.app/protocol/src/room';
+import { AuditLogUpdateSchema } from '@robotools.app/protocol/src/audit';
 
 /**
  * Single client-router shape (procedure names + inputs).
@@ -41,6 +42,8 @@ export type ClientRouterHandlers = {
 	onTeamPhotoUpdate: (input: z.infer<typeof TeamPhotoUpdateSchema>) => void | Promise<void>;
 	/** Ref notes for this division changed. Sent to Judge Advisors only, with no data. */
 	onRefNotesChanged: () => void | Promise<void>;
+	/** An activity log entry was written. Sent only to devices with the Activity view open. */
+	onAuditLogUpdate: (input: z.infer<typeof AuditLogUpdateSchema>) => void | Promise<void>;
 };
 
 export function buildClientRouter(handlers: ClientRouterHandlers) {
@@ -95,6 +98,9 @@ export function buildClientRouter(handlers: ClientRouterHandlers) {
 		}),
 		onRefNotesChanged: w.procedure.mutation(async () => {
 			await handlers.onRefNotesChanged();
+		}),
+		onAuditLogUpdate: w.procedure.input(AuditLogUpdateSchema).mutation(async ({ input }) => {
+			await handlers.onAuditLogUpdate(input);
 		})
 	});
 }

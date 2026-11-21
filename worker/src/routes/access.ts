@@ -22,6 +22,8 @@ import { getRoomGroupId } from '../group/gateway';
 import type { GroupAdvisor } from '@robotools.app/protocol/src/group';
 import { uuidv4 } from '@robotools.app/protocol/src/utils';
 import { judgeAdvisors } from '../db/schema';
+import { announceAudit, recordAudit } from '../audit/log';
+import { getJudgeName } from '../audit/log';
 import type { WRPCRootObject } from '@robotools.app/wrpc/server';
 import { eq } from 'drizzle-orm';
 import z from 'zod';
@@ -178,6 +180,12 @@ export function buildAccessRoute(w: WRPCRootObject<object, ServerContext, Record
 				if (updated.length === 0) {
 					throw new WRPCError('CRITICAL: Judge not found');
 				}
+				announceAudit(ctx.db, session, [
+					await recordAudit(ctx.db, ctx.auth, session, {
+						action: 'lead_judge_changed',
+						details: { name: (await getJudgeName(ctx.db, input.judgeId)) ?? undefined, after: input.isLeadJudge }
+					})
+				]);
 
 				// Do not wait for the broadcast to complete
 				getJudges(ctx.db).then((judgesList) => {
@@ -198,6 +206,9 @@ export function buildAccessRoute(w: WRPCRootObject<object, ServerContext, Record
 				}
 
 				await ctx.network.kickJudge(input.judgeId);
+				announceAudit(ctx.db, session, [
+					await recordAudit(ctx.db, ctx.auth, session, { action: 'judge_link_rotated', details: { name: updated[0]!.name } })
+				]);
 
 				// Always broadcast: already-offline kicks do not get a webSocketClose update.
 				broadcastDeviceListUpdate(ctx, session);
@@ -409,6 +420,9 @@ export function buildAccessRoute(w: WRPCRootObject<object, ServerContext, Record
 				const judgeAdvisorId = uuidv4();
 				const authToken = generateAuthToken();
 				await upsertJudgeAdvisorAuthToken(ctx.db, authToken, judgeAdvisorId, input.name);
+				announceAudit(ctx.db, session, [
+					await recordAudit(ctx.db, ctx.auth, session, { action: 'judge_advisor_added', details: { name: input.name } })
+				]);
 
 				broadcastDeviceListUpdate(ctx, session);
 
@@ -465,11 +479,14 @@ export function buildAccessRoute(w: WRPCRootObject<object, ServerContext, Record
 				const deleted = await ctx.db
 					.delete(judgeAdvisors)
 					.where(eq(judgeAdvisors.id, input.judgeAdvisorId))
-					.returning({ id: judgeAdvisors.id });
+					.returning({ id: judgeAdvisors.id, name: judgeAdvisors.name });
 
 				if (deleted.length === 0) {
 					throw new WRPCError('CRITICAL: Judge Advisor not found');
 				}
+				announceAudit(ctx.db, session, [
+					await recordAudit(ctx.db, ctx.auth, session, { action: 'judge_advisor_removed', details: { name: deleted[0]!.name } })
+				]);
 
 				await ctx.network.kickJudgeAdvisor(input.judgeAdvisorId);
 

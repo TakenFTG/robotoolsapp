@@ -18,6 +18,7 @@ import type { AdminRegistryGateway } from './admin/gateway';
 import type { EmailSender } from './email/types';
 import type { RefLinkGateway } from './ref/link-gateway';
 import { buildRefLinkRoute } from './routes/ref-link';
+import { buildAuditRoute } from './routes/audit';
 
 export interface ServerContext {
 	db: AppDatabase;
@@ -76,7 +77,8 @@ const serverRouter = w.router({
 	group: buildGroupRoute(w),
 	matches: buildMatchesRoute(w),
 	meta: buildMetaRoute(w),
-	refLink: buildRefLinkRoute(w)
+	refLink: buildRefLinkRoute(w),
+	audit: buildAuditRoute(w)
 });
 
 export { serverRouter };

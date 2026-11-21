@@ -17,6 +17,8 @@ import type { ClientRouter } from '../client-router';
 import { transaction } from '../utils';
 import { assertAuthenticatedJudgeAdvisor, assertCanInviteJudges, generateAuthToken } from '../access/tokens';
 import { broadcastDeviceListUpdate } from './device';
+import { announceAudit, recordAudit } from '../audit/log';
+import type { AuditLogUpdate } from '@robotools.app/protocol/src/audit';
 
 export async function getJudges(db: DatabaseOrTransaction): Promise<Judge[]> {
 	return db.select({ id: judges.id, name: judges.name, groupId: judges.groupId, isLeadJudge: judges.isLeadJudge }).from(judges);
@@ -47,6 +49,26 @@ export async function upsertJudge(db: DatabaseOrTransaction, judge: Judge): Prom
 				...emailUpdate
 			}
 		});
+}
+
+/** Record a judge being added, renamed or moved to another group. Null if nothing changed. */
+async function auditJudgeChange(
+	db: DatabaseOrTransaction,
+	ctx: ServerContext,
+	session: Parameters<typeof recordAudit>[2],
+	before: { name: string; groupId: string } | null,
+	after: Judge
+): Promise<AuditLogUpdate | null> {
+	if (!before) {
+		return recordAudit(db, ctx.auth, session, { action: 'judge_added', details: { name: after.name } });
+	}
+	if (before.name === after.name && before.groupId === after.groupId) {
+		return null;
+	}
+	return recordAudit(db, ctx.auth, session, {
+		action: 'judge_updated',
+		details: { name: after.name, ...(before.name !== after.name ? { before: before.name, after: after.name } : {}) }
+	});
 }
 
 export function buildJudgeRoute(w: WRPCRootObject<object, ServerContext, Record<string, never>>) {
@@ -81,6 +103,9 @@ export function buildJudgeRoute(w: WRPCRootObject<object, ServerContext, Record<
 					email: input.email?.trim().toLowerCase() || null
 				};
 				await upsertJudge(ctx.db, judge);
+				announceAudit(ctx.db, session, [
+					await recordAudit(ctx.db, ctx.auth, session, { action: 'judge_added', details: { name: judge.name } })
+				]);
 
 				const [row] = await ctx.db.select({ authToken: judges.authToken }).from(judges).where(eq(judges.id, judge.id)).limit(1);
 				if (!row) {
@@ -99,7 +124,12 @@ export function buildJudgeRoute(w: WRPCRootObject<object, ServerContext, Record<
 				assertAuthenticatedJudgeAdvisor(ctx.auth);
 			}
 
+			const [before] = await ctx.db.select().from(judges).where(eq(judges.id, input.id)).limit(1);
 			await upsertJudge(ctx.db, input);
+			const audit = await auditJudgeChange(ctx.db, ctx, session, before ?? null, input);
+			if (audit) {
+				announceAudit(ctx.db, session, [audit]);
+			}
 
 			// Do not wait for the broadcast to complete
 			getJudges(ctx.db).then((judgesList) => {
@@ -154,6 +184,7 @@ export function buildJudgeRoute(w: WRPCRootObject<object, ServerContext, Record<
 			}
 
 			await updateEssentialData(ctx.db, { ...essentialData, judgeGroups: input });
+			announceAudit(ctx.db, session, [await recordAudit(ctx.db, ctx.auth, session, { action: 'judge_groups_changed' })]);
 
 			// Do not wait for the broadcast to complete
 			transaction(ctx.db, async (tx) => {
@@ -180,23 +211,31 @@ export function buildJudgeRoute(w: WRPCRootObject<object, ServerContext, Record<
 				assertAuthenticatedJudgeAdvisor(ctx.auth);
 			}
 
-			const removedJudges = await transaction(ctx.db, async (tx) => {
+			const { removedJudges, audits } = await transaction(ctx.db, async (tx) => {
 				const allJudges = await tx.select().from(judges);
 				const rtn = new Set<string>();
+				const audits: AuditLogUpdate[] = [];
 
 				for (const v of allJudges) {
 					if (!input.some((v2) => v2.id === v.id)) {
 						rtn.add(v.id);
 						await tx.delete(judges).where(eq(judges.id, v.id));
+						audits.push(await recordAudit(tx, ctx.auth, session, { action: 'judge_removed', details: { name: v.name } }));
 					}
 				}
 
 				for (const judge of input) {
+					const before = allJudges.find((existing) => existing.id === judge.id) ?? null;
 					await upsertJudge(tx, judge);
+					const audit = await auditJudgeChange(tx, ctx, session, before, judge);
+					if (audit) {
+						audits.push(audit);
+					}
 				}
 
-				return Array.from(rtn);
+				return { removedJudges: Array.from(rtn), audits };
 			});
+			announceAudit(ctx.db, session, audits);
 
 			// Do not wait for the broadcast to complete
 			getJudges(ctx.db).then((judgesList) => {

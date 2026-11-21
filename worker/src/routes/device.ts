@@ -6,6 +6,7 @@ import type { WRPCRootObject } from '@robotools.app/wrpc/server';
 import { assertAuthenticatedJudgeAdvisor } from '../access/tokens';
 import { broadcastTopic, type ClientSource, subscribeTopic, unsubscribeTopic } from './subscriptions';
 import { type DeviceAuthenticated, toDeviceAuthenticated } from '@robotools.app/protocol/src/access';
+import { announceAudit, getDeviceName, recordAudit } from '../audit/log';
 
 type DeviceListContext = Pick<ServerContext, 'db' | 'network'>;
 
@@ -132,7 +133,11 @@ export function buildDeviceRoute(w: WRPCRootObject<object, ServerContext, Record
 			if (await ctx.network.isAccessControlEnabled()) {
 				assertAuthenticatedJudgeAdvisor(ctx.auth);
 			}
+			const deviceName = await getDeviceName(ctx.db, input.deviceId);
 			await ctx.network.kickDevice(input.deviceId);
+			announceAudit(ctx.db, session, [
+				await recordAudit(ctx.db, ctx.auth, session, { action: 'device_kicked', details: { name: deviceName } })
+			]);
 			// Always broadcast: already-offline kicks do not get a webSocketClose update.
 			broadcastDeviceListUpdate(ctx, session);
 		})

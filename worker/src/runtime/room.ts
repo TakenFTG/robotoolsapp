@@ -500,7 +500,7 @@ export class Room {
 	}
 
 	async completeUpload(token: string, body: ArrayBuffer, contentType: string | null): Promise<{ status: number; payload: unknown }> {
-		const photo = await completePhotoUpload(this.httpContext(), token, body, contentType);
+		const photo = await completePhotoUpload(this.httpContext(), token, body, contentType, this.wsHandler);
 
 		void this.wsHandler.broadcast<ClientRouter>().onTeamPhotoUpdate.mutation({ action: 'added', photo });
 

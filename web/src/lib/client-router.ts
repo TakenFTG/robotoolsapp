@@ -1,6 +1,7 @@
 import { buildClientRouter } from './client-router-def';
 import { app, subscriptions } from './index.svelte';
 import { refNotes } from './ref-notes.svelte';
+import { auditLogFeed } from './audit-log';
 
 export type { ClientRouter } from './client-router-def';
 
@@ -134,5 +135,9 @@ export const clientRouter = buildClientRouter({
 
 	onRefNotesChanged: () => {
 		refNotes.signal();
+	},
+
+	onAuditLogUpdate: (input) => {
+		auditLogFeed.emit(input);
 	}
 });

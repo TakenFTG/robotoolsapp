@@ -20,6 +20,8 @@
 	import { onMount } from 'svelte';
 	import ResultsReportDialog from './ResultsReportDialog.svelte';
 	import RefLinkDialog from './RefLinkDialog.svelte';
+	import ActivityLogDialog from './ActivityLogDialog.svelte';
+	import ActivityIcon from '$lib/icon/ActivityIcon.svelte';
 	import DownloadIcon from '$lib/icon/DownloadIcon.svelte';
 	import FlagIcon from '$lib/icon/FlagIcon.svelte';
 	import HelpIcon from '$lib/icon/HelpIcon.svelte';
@@ -107,6 +109,11 @@
 	function handleRefLink() {
 		closeMenu();
 		void dialogs.showCustom(RefLinkDialog, { props: {} });
+	}
+
+	function handleActivityLog() {
+		closeMenu();
+		void dialogs.showCustom(ActivityLogDialog, { props: {}, maxWidth: 'max-w-4xl' });
 	}
 
 	function handleExportResults() {
@@ -293,6 +300,16 @@
 
 			<!-- Divider -->
 			<div class="my-2 border-t border-outline-variant"></div>
+
+			<!-- Activity log: who did what. Judge Advisors only; the server enforces it too. -->
+			{#if isJudgeAdvisor}
+				<button onclick={handleActivityLog} class="menu-item" role="menuitem">
+					<span class="mr-3">
+						<ActivityIcon />
+					</span>
+					<span>{m.activity_log()}</span>
+				</button>
+			{/if}
 
 			<!-- Export results.
 			     Sits immediately above Destroy on purpose: the two are a pair, and the record

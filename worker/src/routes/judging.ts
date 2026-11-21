@@ -27,6 +27,7 @@ import {
 	judgeGroupsSubmissionsCache,
 	teamInterviewNotes,
 	teamInterviewRubrics,
+	teams,
 	metadata
 } from '../db/schema';
 import { assertAuthenticatedJudgeAdvisor, assertAuthorship } from '../access/tokens';
@@ -38,6 +39,9 @@ import { broadcastJudgeGroupTopic, subscribeJudgeGroupTopic, unsubscribeTopic, t
 import { transaction } from '../utils';
 import { getAwards } from './essential';
 import type { ClientRouter } from '../client-router';
+import type { AuditLogUpdate } from '@robotools.app/protocol/src/audit';
+import { announceAudit, getJudgeGroupName, getJudgeName, recordAudit, type AuditSession } from '../audit/log';
+import type { Authentication } from '../access/authentication';
 
 /**
  * Remove one submission, and the team's reviewed mark if that was the last of them.
@@ -67,8 +71,10 @@ import type { ClientRouter } from '../client-router';
 async function deleteSubmission(
 	db: DatabaseOrTransaction,
 	table: typeof engineeringNotebookRubrics | typeof teamInterviewRubrics,
-	submissionId: string
-): Promise<{ judgeGroupId: string; teamId: string; teamNoLongerReviewed: boolean } | null> {
+	submissionId: string,
+	auth: Authentication,
+	session: AuditSession
+): Promise<{ judgeGroupId: string; teamId: string; teamNoLongerReviewed: boolean; audit: AuditLogUpdate } | null> {
 	return transaction(db, async (tx) => {
 		// Read the cache row first: it is the only place the judge group is recorded, and it
 		// is about to be cascaded away.
@@ -108,8 +114,70 @@ async function deleteSubmission(
 				.where(and(eq(judgeGroupsReviewedTeams.judgeGroupId, cached.judgeGroupId), eq(judgeGroupsReviewedTeams.teamId, cached.teamId)));
 		}
 
-		return { judgeGroupId: cached.judgeGroupId, teamId: cached.teamId, teamNoLongerReviewed };
+		const audit = await recordAudit(tx, auth, session, {
+			action: table === engineeringNotebookRubrics ? 'notebook_rubric_deleted' : 'interview_rubric_deleted',
+			teamId: cached.teamId,
+			details: {
+				score: cached.score,
+				authorName: await getJudgeName(tx, cached.judgeId),
+				judgeGroupName: await getJudgeGroupName(tx, cached.judgeGroupId)
+			}
+		});
+
+		return { judgeGroupId: cached.judgeGroupId, teamId: cached.teamId, teamNoLongerReviewed, audit };
 	});
+}
+
+type SubmissionTable = typeof engineeringNotebookRubrics | typeof teamInterviewRubrics | typeof teamInterviewNotes;
+
+async function submissionExists(db: DatabaseOrTransaction, table: SubmissionTable, id: string): Promise<boolean> {
+	const [row] = await db.select({ id: table.id }).from(table).where(eq(table.id, id)).limit(1);
+	return !!row;
+}
+
+/**
+ * Record a rubric or notes being saved, inside the transaction that saved it.
+ *
+ * The author is named separately when someone else saved it (a Judge Advisor correcting a
+ * rubric), so the entry shows both whose work it is and who touched it.
+ */
+async function auditSubmission(
+	tx: DatabaseOrTransaction,
+	auth: Authentication,
+	session: AuditSession,
+	kind: 'notebook' | 'interview' | 'notes',
+	submission: { id: string; teamId: string; judgeId: string },
+	existed: boolean,
+	judgeGroupId: string,
+	score: number | null
+): Promise<AuditLogUpdate> {
+	const action =
+		kind === 'notes'
+			? 'interview_notes_saved'
+			: kind === 'notebook'
+				? existed
+					? 'notebook_rubric_edited'
+					: 'notebook_rubric_submitted'
+				: existed
+					? 'interview_rubric_edited'
+					: 'interview_rubric_submitted';
+
+	const actingJudgeId = auth.getJudgeId() ?? (auth.isAuthenticated() ? null : submission.judgeId);
+	const authorName = actingJudgeId === submission.judgeId ? null : await getJudgeName(tx, submission.judgeId);
+
+	return recordAudit(
+		tx,
+		auth,
+		session,
+		{
+			action,
+			teamId: submission.teamId,
+			details: { score, authorName, judgeGroupName: await getJudgeGroupName(tx, judgeGroupId) },
+			// Notes are saved as they are written; one entry per sitting is enough.
+			coalesceKey: kind === 'notes' ? `notes:${submission.id}` : undefined
+		},
+		submission.judgeId
+	);
 }
 
 /**
@@ -220,6 +288,58 @@ export function broadcastFinalAwardNominationsUpdate(
 	});
 }
 
+/**
+ * Describe a rewrite of one award's final list as what a person would say they did: these
+ * teams added, those removed, or the order changed.
+ */
+async function auditFinalRankings(
+	tx: DatabaseOrTransaction,
+	auth: Authentication,
+	session: AuditSession,
+	awardName: string,
+	before: readonly string[],
+	nominations: readonly AwardNomination[]
+): Promise<AuditLogUpdate[]> {
+	const after = nominations.map((nomination) => nomination.teamId);
+	const audits: AuditLogUpdate[] = [];
+
+	for (const nomination of nominations) {
+		if (!before.includes(nomination.teamId)) {
+			audits.push(
+				await recordAudit(tx, auth, session, {
+					action: 'final_nomination_added',
+					teamId: nomination.teamId,
+					awardName,
+					details: { judgeGroupName: await getJudgeGroupName(tx, nomination.judgeGroupId) }
+				})
+			);
+		}
+	}
+	for (const teamId of before) {
+		if (!after.includes(teamId)) {
+			audits.push(await recordAudit(tx, auth, session, { action: 'final_nomination_removed', teamId, awardName }));
+		}
+	}
+
+	const kept = after.filter((teamId) => before.includes(teamId));
+	const keptBefore = before.filter((teamId) => after.includes(teamId));
+	if (kept.some((teamId, index) => keptBefore[index] !== teamId)) {
+		const numbers = await tx.select({ id: teams.id, number: teams.number }).from(teams);
+		const numberOf = new Map(numbers.map((team) => [team.id, team.number]));
+		audits.push(
+			await recordAudit(tx, auth, session, {
+				action: 'final_ranking_changed',
+				awardName,
+				details: { teamNumbers: after.map((teamId) => numberOf.get(teamId) ?? '?') },
+				// Dragging a team down three places is one reorder.
+				coalesceKey: `final:${awardName}`
+			})
+		);
+	}
+
+	return audits;
+}
+
 export function buildJudgingRoute(w: WRPCRootObject<object, ServerContext, Record<string, never>>) {
 	return {
 		completeEngineeringNotebookRubric: w.procedure
@@ -233,7 +353,8 @@ export function buildJudgingRoute(w: WRPCRootObject<object, ServerContext, Recor
 				assertAuthorship(ctx.auth, input.submission.judgeId);
 
 				// insert or update (setWhere keeps judgeId sticky / blocks foreign overwrite)
-				const { submissionCache, isReviewedNewTeam } = await transaction(ctx.db, async (tx) => {
+				const { submissionCache, isReviewedNewTeam, audit } = await transaction(ctx.db, async (tx) => {
+					const existed = await submissionExists(tx, engineeringNotebookRubrics, input.submission.id);
 					requireAuthoredUpsert(
 						(
 							await tx
@@ -275,8 +396,19 @@ export function buildJudgingRoute(w: WRPCRootObject<object, ServerContext, Recor
 					)[0];
 
 					const isReviewedNewTeam = await addReviewedTeam(tx, input.judgeGroupId, input.submission.teamId);
-					return { submissionCache, isReviewedNewTeam };
+					const audit = await auditSubmission(
+						tx,
+						ctx.auth,
+						session,
+						'notebook',
+						input.submission,
+						existed,
+						input.judgeGroupId,
+						sumRubricScores(input.submission.rubric)
+					);
+					return { submissionCache, isReviewedNewTeam, audit };
 				});
+				announceAudit(ctx.db, session, [audit]);
 				// Do not wait for the broadcast to complete
 				broadcastJudgeGroupTopic(ctx.db, input.judgeGroupId, 'submissions', session, async (client) =>
 					client.onSubmissionCacheUpdate.mutation(submissionCache)
@@ -304,10 +436,11 @@ export function buildJudgingRoute(w: WRPCRootObject<object, ServerContext, Recor
 		deleteEngineeringNotebookRubric: w.procedure.input(z.object({ id: z.uuidv4() })).mutation(async ({ ctx, input, session }) => {
 			assertAuthenticatedJudgeAdvisor(ctx.auth);
 
-			const removed = await deleteSubmission(ctx.db, engineeringNotebookRubrics, input.id);
+			const removed = await deleteSubmission(ctx.db, engineeringNotebookRubrics, input.id, ctx.auth, session);
 			if (!removed) {
 				return;
 			}
+			announceAudit(ctx.db, session, [removed.audit]);
 
 			announceSubmissionRemoval(ctx, session, removed, input.id);
 		}),
@@ -315,10 +448,11 @@ export function buildJudgingRoute(w: WRPCRootObject<object, ServerContext, Recor
 		deleteTeamInterviewRubric: w.procedure.input(z.object({ id: z.uuidv4() })).mutation(async ({ ctx, input, session }) => {
 			assertAuthenticatedJudgeAdvisor(ctx.auth);
 
-			const removed = await deleteSubmission(ctx.db, teamInterviewRubrics, input.id);
+			const removed = await deleteSubmission(ctx.db, teamInterviewRubrics, input.id, ctx.auth, session);
 			if (!removed) {
 				return;
 			}
+			announceAudit(ctx.db, session, [removed.audit]);
 
 			announceSubmissionRemoval(ctx, session, removed, input.id);
 		}),
@@ -341,7 +475,8 @@ export function buildJudgingRoute(w: WRPCRootObject<object, ServerContext, Recor
 			.mutation(async ({ ctx, input, session }) => {
 				assertAuthorship(ctx.auth, input.submission.judgeId);
 
-				const { submissionCache, isReviewedNewTeam } = await transaction(ctx.db, async (tx) => {
+				const { submissionCache, isReviewedNewTeam, audit } = await transaction(ctx.db, async (tx) => {
+					const existed = await submissionExists(tx, teamInterviewRubrics, input.submission.id);
 					requireAuthoredUpsert(
 						(
 							await tx
@@ -381,8 +516,19 @@ export function buildJudgingRoute(w: WRPCRootObject<object, ServerContext, Recor
 							.returning()
 					)[0];
 					const isReviewedNewTeam = await addReviewedTeam(tx, input.judgeGroupId, input.submission.teamId);
-					return { submissionCache, isReviewedNewTeam };
+					const audit = await auditSubmission(
+						tx,
+						ctx.auth,
+						session,
+						'interview',
+						input.submission,
+						existed,
+						input.judgeGroupId,
+						sumRubricScores(input.submission.rubric)
+					);
+					return { submissionCache, isReviewedNewTeam, audit };
 				});
+				announceAudit(ctx.db, session, [audit]);
 				// Do not wait for the broadcast to complete
 				broadcastJudgeGroupTopic(ctx.db, input.judgeGroupId, 'submissions', session, async (client) =>
 					client.onSubmissionCacheUpdate.mutation(submissionCache)
@@ -421,7 +567,8 @@ export function buildJudgingRoute(w: WRPCRootObject<object, ServerContext, Recor
 			.mutation(async ({ ctx, input, session }) => {
 				assertAuthorship(ctx.auth, input.submission.judgeId);
 
-				const { submissionCache, isReviewedNewTeam } = await transaction(ctx.db, async (tx) => {
+				const { submissionCache, isReviewedNewTeam, audit } = await transaction(ctx.db, async (tx) => {
+					const existed = await submissionExists(tx, teamInterviewNotes, input.submission.id);
 					requireAuthoredUpsert(
 						(
 							await tx
@@ -460,8 +607,10 @@ export function buildJudgingRoute(w: WRPCRootObject<object, ServerContext, Recor
 							.returning()
 					)[0];
 					const isReviewedNewTeam = await addReviewedTeam(tx, input.judgeGroupId, input.submission.teamId);
-					return { submissionCache, isReviewedNewTeam };
+					const audit = await auditSubmission(tx, ctx.auth, session, 'notes', input.submission, existed, input.judgeGroupId, null);
+					return { submissionCache, isReviewedNewTeam, audit };
 				});
+				announceAudit(ctx.db, session, [audit]);
 				// Do not wait for the broadcast to complete
 				broadcastJudgeGroupTopic(ctx.db, input.judgeGroupId, 'submissions', session, async (client) =>
 					client.onSubmissionCacheUpdate.mutation(submissionCache)
@@ -504,14 +653,44 @@ export function buildJudgingRoute(w: WRPCRootObject<object, ServerContext, Recor
 		updateAwardRanking: w.procedure
 			.input(z.object({ judgeGroupId: z.uuidv4(), teamId: z.uuidv4(), awardName: AwardNameSchema, ranking: RankSchema }))
 			.mutation(async ({ ctx, input, session }) => {
-				// insert or update
-				await ctx.db
-					.insert(awardRankings)
-					.values(input)
-					.onConflictDoUpdate({
-						target: [awardRankings.judgeGroupId, awardRankings.awardName, awardRankings.teamId],
-						set: input
+				const audit = await transaction(ctx.db, async (tx) => {
+					const [previous] = await tx
+						.select({ ranking: awardRankings.ranking })
+						.from(awardRankings)
+						.where(
+							and(
+								eq(awardRankings.judgeGroupId, input.judgeGroupId),
+								eq(awardRankings.awardName, input.awardName),
+								eq(awardRankings.teamId, input.teamId)
+							)
+						)
+						.limit(1);
+
+					// insert or update
+					await tx
+						.insert(awardRankings)
+						.values(input)
+						.onConflictDoUpdate({
+							target: [awardRankings.judgeGroupId, awardRankings.awardName, awardRankings.teamId],
+							set: input
+						});
+
+					const before = previous?.ranking ?? 0;
+					if (before === input.ranking) {
+						return null;
+					}
+					return recordAudit(tx, ctx.auth, session, {
+						action: 'award_ranking_changed',
+						teamId: input.teamId,
+						awardName: input.awardName,
+						details: { before, after: input.ranking, judgeGroupName: await getJudgeGroupName(tx, input.judgeGroupId) },
+						// Clicking through the stars is one decision, not five.
+						coalesceKey: `ranking:${input.judgeGroupId}:${input.awardName}:${input.teamId}`
 					});
+				});
+				if (audit) {
+					announceAudit(ctx.db, session, [audit]);
+				}
 
 				broadcastJudgeGroupTopic(ctx.db, input.judgeGroupId, 'awardRankings', session, async (client) =>
 					client.onAwardRankingsUpdate.mutation(input)
@@ -551,7 +730,7 @@ export function buildJudgingRoute(w: WRPCRootObject<object, ServerContext, Recor
 		nominateFinalAward: w.procedure
 			.input(z.object({ awardName: AwardNameSchema, teamId: z.uuidv4(), judgeGroupId: z.uuidv4().nullable() }))
 			.mutation(async ({ ctx, input, session }) => {
-				await transaction(ctx.db, async (tx) => {
+				const audit = await transaction(ctx.db, async (tx) => {
 					const lastRanking =
 						(
 							await tx
@@ -561,11 +740,24 @@ export function buildJudgingRoute(w: WRPCRootObject<object, ServerContext, Recor
 								.orderBy(desc(finalAwardNominations.ranking))
 								.limit(1)
 						)[0]?.ranking ?? -1;
-					await tx
+					const inserted = await tx
 						.insert(finalAwardNominations)
 						.values({ ...input, ranking: lastRanking + 1 })
-						.onConflictDoNothing();
+						.onConflictDoNothing()
+						.returning();
+					if (inserted.length === 0) {
+						return null;
+					}
+					return recordAudit(tx, ctx.auth, session, {
+						action: 'final_nomination_added',
+						teamId: input.teamId,
+						awardName: input.awardName,
+						details: { judgeGroupName: await getJudgeGroupName(tx, input.judgeGroupId) }
+					});
 				});
+				if (audit) {
+					announceAudit(ctx.db, session, [audit]);
+				}
 
 				// Do not wait for the broadcast to complete
 				broadcastFinalAwardNominationsUpdate(ctx.db, input.awardName, session.broadcast<ClientRouter>());
@@ -574,11 +766,23 @@ export function buildJudgingRoute(w: WRPCRootObject<object, ServerContext, Recor
 		removeFromFinalAwardNominations: w.procedure
 			.input(z.object({ awardName: AwardNameSchema, teamId: z.uuidv4() }))
 			.mutation(async ({ ctx, input, session }) => {
-				await transaction(ctx.db, async (tx) => {
-					await tx
+				const audit = await transaction(ctx.db, async (tx) => {
+					const deleted = await tx
 						.delete(finalAwardNominations)
-						.where(and(eq(finalAwardNominations.awardName, input.awardName), eq(finalAwardNominations.teamId, input.teamId)));
+						.where(and(eq(finalAwardNominations.awardName, input.awardName), eq(finalAwardNominations.teamId, input.teamId)))
+						.returning();
+					if (deleted.length === 0) {
+						return null;
+					}
+					return recordAudit(tx, ctx.auth, session, {
+						action: 'final_nomination_removed',
+						teamId: input.teamId,
+						awardName: input.awardName
+					});
 				});
+				if (audit) {
+					announceAudit(ctx.db, session, [audit]);
+				}
 
 				// Do not wait for the broadcast to complete
 				broadcastFinalAwardNominationsUpdate(ctx.db, input.awardName, session.broadcast<ClientRouter>());
@@ -588,7 +792,8 @@ export function buildJudgingRoute(w: WRPCRootObject<object, ServerContext, Recor
 			.input(z.object({ awardName: AwardNameSchema, nominations: z.array(AwardNominationSchema) }))
 			.mutation(async ({ ctx, input, session }) => {
 				// remove all existing rankings for the award, transactionally
-				await transaction(ctx.db, async (tx) => {
+				const audits = await transaction(ctx.db, async (tx) => {
+					const before = (await getFinalAwardNominationsForAward(tx, input.awardName)).map((nomination) => nomination.teamId);
 					await tx.delete(finalAwardNominations).where(eq(finalAwardNominations.awardName, input.awardName));
 					for (let i = 0; i < input.nominations.length; i++) {
 						await tx.insert(finalAwardNominations).values({
@@ -598,7 +803,9 @@ export function buildJudgingRoute(w: WRPCRootObject<object, ServerContext, Recor
 							judgeGroupId: input.nominations[i].judgeGroupId
 						});
 					}
+					return auditFinalRankings(tx, ctx.auth, session, input.awardName, before, input.nominations);
 				});
+				announceAudit(ctx.db, session, audits);
 
 				// Do not wait for the broadcast to complete
 				broadcastFinalAwardNominationsUpdate(ctx.db, input.awardName, session.broadcast<ClientRouter>());
@@ -606,7 +813,16 @@ export function buildJudgingRoute(w: WRPCRootObject<object, ServerContext, Recor
 
 		startAwardDeliberation: w.procedure.mutation(async ({ ctx, session }) => {
 			// Update the judging step to 'award_deliberations' in the event metadata
-			await ctx.db.update(metadata).set({ judgingStep: 'award_deliberations' });
+			const audit = await transaction(ctx.db, async (tx) => {
+				const [current] = await tx.select({ judgingStep: metadata.judgingStep }).from(metadata).limit(1);
+				await tx.update(metadata).set({ judgingStep: 'award_deliberations' });
+				return current?.judgingStep === 'award_deliberations'
+					? null
+					: recordAudit(tx, ctx.auth, session, { action: 'award_deliberation_started' });
+			});
+			if (audit) {
+				announceAudit(ctx.db, session, [audit]);
+			}
 
 			// Do not wait for the broadcast to complete
 			session.broadcast<ClientRouter>().onAwardDeliberationStarted.mutation();
