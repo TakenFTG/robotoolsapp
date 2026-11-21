@@ -28,7 +28,9 @@ const EVENT_ID = 5501;
 
 type JudgesSeed = { divisionId: number; eventName?: string; eventId?: number; teams: string[]; groupId?: string };
 
-describe('linking a ref room to Judges Rooms', () => {
+// A real server and real sockets per test. CI runs every package's tests at once, which has
+// pushed the first of these past vitest's 5s default on a busy runner.
+describe('linking a ref room to Judges Rooms', { timeout: 30_000 }, () => {
 	let dataDir: string;
 	let port: number;
 	let hub: Hub;

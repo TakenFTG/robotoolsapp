@@ -1187,5 +1187,8 @@
 	"team_screening_clear": "Clear flag",
 	"team_screening_flag_team": "Flag {team} for follow-up",
 	"team_screening_flagged": "{team} is flagged for follow-up. {note}",
-	"only_show_flagged_teams": "Only show teams flagged for follow-up"
+	"only_show_flagged_teams": "Only show teams flagged for follow-up",
+	"excellence_about_these_standings": "About these standings",
+	"excellence_how_eligibility_works": "How eligibility is worked out",
+	"excellence_eligible": "Eligible"
 }
