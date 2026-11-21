@@ -278,7 +278,7 @@
 									{@const interview = roomTeam ? interviewStandings.get(roomTeam.id) : undefined}
 									<row>
 										<team>
-											<div class="flex items-center gap-1" class:text-green-500={team.isEligible}>
+											<div class="flex flex-wrap items-center justify-center gap-1" class:text-green-500={team.isEligible}>
 												{team.teamNumber}
 												<RefNotesBadge teamNumber={team.teamNumber} />
 												{#if roomTeam}
