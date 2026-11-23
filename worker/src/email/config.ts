@@ -26,7 +26,7 @@ export interface EmailEnv extends Record<string, string | undefined> {
 export interface EmailConfiguration {
 	sender: EmailSender;
 	/**
-	 * Absolute origin the emailed links point at, e.g. https://judge.vexaus.live.
+	 * Absolute origin the emailed links point at, e.g. https://robotools.app.
 	 *
 	 * Configuration, never a request parameter. Links built in the browser can safely use
 	 * `window.location.origin` because the browser already trusts where it is; a server
