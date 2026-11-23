@@ -299,6 +299,56 @@ describe('linking a ref room to Judges Rooms', { timeout: 30_000 }, () => {
 		await eventually(async () => expect((await judges.refLink.getStatus.query()).linkedTo).toBeNull());
 	});
 
+	it('keeps a division label and its room nickname the same, whichever is changed', async () => {
+		const groupId = crypto.randomUUID();
+		const science = crypto.randomUUID();
+		const technology = crypto.randomUUID();
+		await seedJudgesRoom(science, { divisionId: 1, teams: ['1A'], groupId, eventName: 'Nationals Science' });
+		const technologyToken = await seedJudgesRoom(technology, { divisionId: 2, teams: ['2B'] });
+
+		const group = await hub.onGroup(groupId, (g) =>
+			g.createGroup({
+				groupId,
+				name: 'Nationals',
+				roomId: science,
+				divisionLabel: 'Nationals Science',
+				advisorName: 'Group JA',
+				advisorEmail: null
+			})
+		);
+		if (!group.ok) throw new Error(group.error);
+		const nicknameOf = async (roomId: string) => {
+			const storage = openDatabase(new DataDirectory(dataDir).roomFile(roomId), migrationsPath('migrations'));
+			const [row] = await storage.db.select({ eventNickname: metadata.eventNickname }).from(metadata);
+			return row?.eventNickname ?? null;
+		};
+
+		// Joining a group names the room after its label; a label that is just the event's name is no nickname.
+		const advisor = connectJudges(technology, technologyToken);
+		await advisor.group.attachToGroup.mutation({ groupId, groupAuthToken: group.authToken, divisionLabel: 'Tech' });
+		expect(await nicknameOf(technology)).toBe('Tech');
+		expect(await nicknameOf(science)).toBeNull();
+
+		// Renamed in the group: the room follows.
+		await hub.onGroup(groupId, (g) =>
+			g.handleGroupRequest({
+				groupId,
+				auth: group.authToken,
+				deviceId: crypto.randomUUID(),
+				action: { kind: 'rename_division', roomId: science, label: 'Sci' }
+			})
+		);
+		await eventually(async () => expect(await nicknameOf(science)).toBe('Sci'));
+
+		// Renamed from the room: the group follows, and clearing goes back to the event's name.
+		const describe = async () =>
+			(await hub.onGroup(groupId, (g) => g.describeForRoom({ roomId: technology })))?.divisions.find((d) => d.roomId === technology)?.label;
+		await advisor.essential.setEventNickname.mutation({ nickname: 'Technology MS' });
+		expect(await describe()).toBe('Technology MS');
+		await advisor.essential.setEventNickname.mutation({ nickname: null });
+		expect(await describe()).toBe('Regional');
+	});
+
 	it('links every division of an event group with one code, and divisions that join later', async () => {
 		const groupId = crypto.randomUUID();
 		const science = crypto.randomUUID();

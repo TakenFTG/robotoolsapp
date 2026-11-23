@@ -1,6 +1,13 @@
 <script lang="ts">
 	import { AdminRpcError, callAdminRpc } from '$lib/admin-client';
-	import type { AdminAction, AdminRoomDetail, AdminRoomSummary } from '@robotools.app/protocol/src/admin';
+	import type {
+		AdminAction,
+		AdminRefRoomDetail,
+		AdminRefRoomSummary,
+		AdminRoomDetail,
+		AdminRoomSummary
+	} from '@robotools.app/protocol/src/admin';
+	import { buildRefRoomJoinUrl } from '@robotools.app/protocol/src/ref';
 	import { errorToString } from '$lib/utils.svelte';
 	import { onMount } from 'svelte';
 
@@ -41,6 +48,11 @@
 
 	let rooms = $state<AdminRoomSummary[]>([]);
 	let selected = $state<AdminRoomDetail | null>(null);
+
+	/** Which list is showing. Ref rooms are their own kind of room, so their own list. */
+	let view = $state<'events' | 'ref'>('events');
+	let refRooms = $state<AdminRefRoomSummary[]>([]);
+	let selectedRef = $state<AdminRefRoomDetail | null>(null);
 
 	let busy = $state(false);
 	let errorMessage = $state('');
@@ -112,6 +124,8 @@
 				storeToken(null);
 				rooms = [];
 				selected = null;
+				refRooms = [];
+				selectedRef = null;
 				signedOutMessage = 'Your session expired. Sign in again.';
 				return;
 			}
@@ -138,14 +152,106 @@
 			storeToken(null);
 			rooms = [];
 			selected = null;
+			refRooms = [];
+			selectedRef = null;
 		});
 	}
 
 	async function loadRooms() {
-		const result = await call({ kind: 'list_rooms' });
+		const [result, refResult] = await Promise.all([call({ kind: 'list_rooms' }), call({ kind: 'list_ref_rooms' })]);
 		if (result.kind === 'rooms') {
 			rooms = result.rooms;
 		}
+		if (refResult.kind === 'ref_rooms') {
+			refRooms = refResult.refRooms;
+		}
+	}
+
+	function openRefRoom(refRoomId: string) {
+		issuedRefLink = null;
+		return run(async () => {
+			try {
+				const result = await call({ kind: 'ref_room_detail', refRoomId });
+				selectedRef = result.kind === 'ref_room' ? result.refRoom : null;
+			} catch (error) {
+				if (error instanceof AdminRpcError && error.status === 404) {
+					selectedRef = null;
+					errorMessage = 'That ref room no longer exists.';
+					await loadRooms();
+					return;
+				}
+				throw error;
+			}
+		});
+	}
+
+	function destroyRefRoom(room: AdminRefRoomDetail) {
+		return run(async () => {
+			const confirmed = window.confirm(
+				`Permanently destroy the ref room for "${room.eventName}"?\n\n` +
+					`This deletes every incident and note in it and every referee's access link, and unlinks it from its divisions. ` +
+					`It cannot be undone.`
+			);
+			if (!confirmed) {
+				return;
+			}
+
+			await call({ kind: 'destroy_ref_room', refRoomId: room.refRoomId });
+			selectedRef = null;
+			await loadRooms();
+		});
+	}
+
+	/** A linked division's Judges' Room, opened in the events view. */
+	function openLinkedEvent(roomId: string) {
+		selectedRef = null;
+		view = 'events';
+		return openRoom(roomId);
+	}
+
+	/** A ref link that was just minted, shown once like a Judge Advisor's. */
+	let issuedRefLink = $state<string | null>(null);
+
+	async function refreshSelectedRef(refRoomId: string) {
+		const result = await call({ kind: 'ref_room_detail', refRoomId });
+		selectedRef = result.kind === 'ref_room' ? result.refRoom : null;
+	}
+
+	function addReferee(room: AdminRefRoomDetail) {
+		return run(async () => {
+			const name = window.prompt('Referee name:');
+			if (!name?.trim()) return;
+
+			// An unclaimed room needs a Head Referee before anyone can run it, so offer that first.
+			const hasHead = room.referees.some((referee) => referee.role === 'head_referee');
+			const choice = window.prompt('Role?\n\n1. Head Referee\n2. Referee', hasHead ? '2' : '1');
+			if (choice === null) return;
+			const role = choice.trim() === '1' ? 'head_referee' : choice.trim() === '2' ? 'referee' : null;
+			if (!role) {
+				errorMessage = 'Choose 1 for Head Referee or 2 for Referee.';
+				return;
+			}
+
+			const result = await call({ kind: 'add_referee', refRoomId: room.refRoomId, name: name.trim(), role });
+			if (result.kind === 'access_link') {
+				issuedRefLink = buildRefRoomJoinUrl(location.origin, room.refRoomId, result.authToken);
+			}
+			await refreshSelectedRef(room.refRoomId);
+		});
+	}
+
+	function removeReferee(room: AdminRefRoomDetail, refereeId: string, name: string) {
+		return run(async () => {
+			if (!window.confirm(`Remove ${name}? Their access link stops working immediately. Incidents they logged stay in the room.`)) {
+				return;
+			}
+			await call({ kind: 'remove_referee', refRoomId: room.refRoomId, refereeId });
+			await refreshSelectedRef(room.refRoomId);
+		});
+	}
+
+	function roleLabel(role: 'head_referee' | 'referee'): string {
+		return role === 'head_referee' ? 'Head Referee' : 'Referee';
 	}
 
 	function openRoom(roomId: string) {
@@ -165,6 +271,17 @@
 			if (selected) {
 				const result = await call({ kind: 'room_detail', roomId: selected.roomId });
 				selected = result.kind === 'room' ? result.room : null;
+			}
+			if (selectedRef) {
+				// Checked against the fresh list first, so a ref room destroyed elsewhere just
+				// closes rather than surfacing as a 404.
+				const refRoomId = selectedRef.refRoomId;
+				if (refRooms.some((room) => room.refRoomId === refRoomId)) {
+					const result = await call({ kind: 'ref_room_detail', refRoomId });
+					selectedRef = result.kind === 'ref_room' ? result.refRoom : null;
+				} else {
+					selectedRef = null;
+				}
 			}
 		});
 	}
@@ -285,7 +402,9 @@
 		<div class="flex flex-wrap items-center justify-between gap-3">
 			<div>
 				<h1 class="text-2xl font-semibold text-gray-900">Judges' Room admin</h1>
-				<p class="text-sm text-gray-600">Events and the people running them. No judging data is shown here.</p>
+				<p class="text-sm text-gray-600">
+					Events, ref rooms and the people running them. No judging data or incident notes are shown here.
+				</p>
 			</div>
 			{#if token}
 				<div class="flex gap-2">
@@ -322,6 +441,117 @@
 				<button class="primary w-full" onclick={signIn} disabled={busy || !username || !password}>
 					{busy ? 'Signing in…' : 'Sign in'}
 				</button>
+			</div>
+		{:else if selectedRef}
+			{@const refRoom = selectedRef}
+			<div class="space-y-5 rounded-2xl bg-white p-6 shadow-sm">
+				<div class="flex flex-wrap items-start justify-between gap-3">
+					<div>
+						<button class="mb-2 text-sm text-slate-600 underline" onclick={() => (selectedRef = null)}>← All ref rooms</button>
+						<h2 class="text-xl font-semibold text-gray-900">{refRoom.eventName}</h2>
+						<p class="text-sm text-gray-600">
+							Ref room · {refRoom.program}
+							{#if refRoom.robotEventsSku}· {refRoom.robotEventsSku}{/if}
+							{#if refRoom.linkedGroupId}· Linked through an event group{/if}
+						</p>
+						<p class="mt-1 font-mono text-xs text-gray-400">{refRoom.refRoomId}</p>
+						<p class="mt-1 text-xs text-gray-500">
+							Created {formatDate(refRoom.createdAt)} · Last active {formatActivity(refRoom.lastActivityAt)}
+						</p>
+					</div>
+					<button class="danger" onclick={() => destroyRefRoom(refRoom)} disabled={busy}>Destroy ref room</button>
+				</div>
+
+				<div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+					<div class="rounded-lg bg-slate-50 p-3">
+						<div class="text-xs text-gray-500">Referees</div>
+						<div class="text-lg font-medium text-gray-900">{refRoom.refereeCount}</div>
+					</div>
+					<div class="rounded-lg bg-slate-50 p-3">
+						<div class="text-xs text-gray-500">Linked divisions</div>
+						<div class="text-lg font-medium text-gray-900">{refRoom.linkedDivisionCount}</div>
+					</div>
+					<div class="rounded-lg bg-slate-50 p-3">
+						<div class="text-xs text-gray-500">Incidents</div>
+						<div class="text-lg font-medium text-gray-900">{refRoom.incidentCount}</div>
+					</div>
+					<div class="rounded-lg bg-slate-50 p-3">
+						<div class="text-xs text-gray-500">Devices online</div>
+						<div class="text-lg font-medium text-gray-900">{refRoom.onlineDeviceCount}</div>
+					</div>
+				</div>
+
+				<div>
+					<div class="mb-2 flex items-center justify-between">
+						<h3 class="text-sm font-medium text-gray-900">Referees</h3>
+						<button class="primary tiny" onclick={() => addReferee(refRoom)} disabled={busy}>Add referee</button>
+					</div>
+
+					{#if issuedRefLink}
+						<div class="mb-2 rounded-lg border border-green-200 bg-green-50 p-3">
+							<p class="mb-1 text-xs font-medium text-green-900">Access link — copy it now, it is not shown again</p>
+							<div class="flex items-center gap-2">
+								<input
+									class="classic w-full font-mono text-xs"
+									readonly
+									value={issuedRefLink}
+									onfocus={(event) => event.currentTarget.select()}
+								/>
+								<button class="secondary tiny shrink-0" onclick={() => navigator.clipboard?.writeText(issuedRefLink ?? '')}>Copy</button>
+								<button class="lightweight tiny shrink-0" onclick={() => (issuedRefLink = null)}>Done</button>
+							</div>
+						</div>
+					{/if}
+
+					{#if refRoom.referees.length === 0}
+						<p class="text-sm text-gray-500">Unclaimed — no referee has set this room up yet.</p>
+					{:else}
+						<ul class="divide-y divide-gray-100 rounded border border-gray-200">
+							{#each refRoom.referees as referee (referee.id)}
+								<li class="flex items-center gap-3 px-3 py-2 text-sm">
+									<span class="flex-1 truncate text-gray-900">{referee.name}</span>
+									<span class="shrink-0 text-xs text-gray-500">{roleLabel(referee.role)}</span>
+									<button
+										class="shrink-0 rounded-md px-2 py-1 text-xs text-red-600 hover:bg-red-50"
+										onclick={() => removeReferee(refRoom, referee.id, referee.name)}
+										disabled={busy}
+									>
+										Remove
+									</button>
+								</li>
+							{/each}
+						</ul>
+					{/if}
+				</div>
+
+				<div>
+					<h3 class="mb-2 text-sm font-medium text-gray-900">Linked divisions</h3>
+					{#if refRoom.linkedDivisions.length === 0}
+						<p class="text-sm text-gray-500">Not linked to any Judges' Room.</p>
+					{:else}
+						<ul class="divide-y divide-gray-100 rounded border border-gray-200">
+							{#each refRoom.linkedDivisions as division (division.judgesRoomId)}
+								<li>
+									<button
+										class="flex w-full items-center gap-3 px-3 py-2 text-left text-sm hover:bg-gray-50"
+										onclick={() => openLinkedEvent(division.judgesRoomId)}
+										disabled={busy}
+									>
+										<span class="flex-1 truncate text-gray-900">{division.label}</span>
+										<span class="shrink-0 text-xs text-gray-500">Linked {formatDate(division.linkedAt)}</span>
+									</button>
+								</li>
+							{/each}
+						</ul>
+					{/if}
+				</div>
+
+				{#if refRoom.divisions.length > 0}
+					<div>
+						<h3 class="mb-2 text-sm font-medium text-gray-900">Event divisions</h3>
+						<p class="text-sm text-gray-600">{refRoom.divisions.map((division) => division.name).join(', ')}</p>
+					</div>
+				{/if}
 			</div>
 		{:else if selected}
 			{@const room = selected}
@@ -429,31 +659,85 @@
 				</div>
 			</div>
 		{:else}
-			<div class="rounded-2xl bg-white p-2 shadow-sm">
-				{#if rooms.length === 0}
-					<p class="p-4 text-sm text-gray-600">
-						No events registered. Only events created after the admin registry was deployed appear here — Durable Objects cannot be listed
-						retrospectively.
-					</p>
-				{:else}
-					<ul class="divide-y divide-gray-100">
-						{#each rooms as room (room.roomId)}
-							<li>
-								<button
-									class="flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-gray-50"
-									onclick={() => openRoom(room.roomId)}
-									disabled={busy}
-								>
-									<span class="min-w-0">
-										<span class="block truncate font-medium text-gray-900">{room.eventName}</span>
-										<span class="block truncate text-xs text-gray-500">
-											{room.program} · {room.eventGradeLevel}
-											{#if room.divisionId !== null}· Division {room.divisionId}{/if}
-											{#if room.robotEventsSku}· {room.robotEventsSku}{/if}
-											{#if room.groupId}· In an event group{/if}
+			<div class="flex gap-2 sm:w-fit" role="tablist">
+				<button
+					role="tab"
+					aria-selected={view === 'events'}
+					class="flex-1 whitespace-nowrap {view === 'events' ? 'primary' : 'lightweight'}"
+					onclick={() => (view = 'events')}
+				>
+					Judges' Rooms ({rooms.length})
+				</button>
+				<button
+					role="tab"
+					aria-selected={view === 'ref'}
+					class="flex-1 whitespace-nowrap {view === 'ref' ? 'primary' : 'lightweight'}"
+					onclick={() => (view = 'ref')}
+				>
+					Ref rooms ({refRooms.length})
+				</button>
+			</div>
+
+			{#if view === 'ref'}
+				<div class="rounded-2xl bg-white p-2 shadow-sm">
+					{#if refRooms.length === 0}
+						<p class="p-4 text-sm text-gray-600">No ref rooms.</p>
+					{:else}
+						<ul class="divide-y divide-gray-100">
+							{#each refRooms as refRoom (refRoom.refRoomId)}
+								<li>
+									<button
+										class="flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-gray-50"
+										onclick={() => openRefRoom(refRoom.refRoomId)}
+										disabled={busy}
+									>
+										<span class="min-w-0">
+											<span class="block truncate font-medium text-gray-900">{refRoom.eventName}</span>
+											<span class="block truncate text-xs text-gray-500">
+												{refRoom.program}
+												{#if refRoom.robotEventsSku}· {refRoom.robotEventsSku}{/if}
+												· {refRoom.refereeCount === 0
+													? 'Unclaimed'
+													: `${refRoom.refereeCount} referee${refRoom.refereeCount === 1 ? '' : 's'}`}
+												· {refRoom.linkedDivisionCount} linked division{refRoom.linkedDivisionCount === 1 ? '' : 's'}
+											</span>
 										</span>
-									</span>
-									<!--
+										<span class="shrink-0 text-right text-xs text-gray-400">
+											<span class="block">Last active {formatActivity(refRoom.lastActivityAt)}</span>
+											<span class="block">Created {formatDate(refRoom.createdAt)}</span>
+										</span>
+									</button>
+								</li>
+							{/each}
+						</ul>
+					{/if}
+				</div>
+			{:else}
+				<div class="rounded-2xl bg-white p-2 shadow-sm">
+					{#if rooms.length === 0}
+						<p class="p-4 text-sm text-gray-600">
+							No events registered. Only events created after the admin registry was deployed appear here — Durable Objects cannot be listed
+							retrospectively.
+						</p>
+					{:else}
+						<ul class="divide-y divide-gray-100">
+							{#each rooms as room (room.roomId)}
+								<li>
+									<button
+										class="flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-gray-50"
+										onclick={() => openRoom(room.roomId)}
+										disabled={busy}
+									>
+										<span class="min-w-0">
+											<span class="block truncate font-medium text-gray-900">{room.eventName}</span>
+											<span class="block truncate text-xs text-gray-500">
+												{room.program} · {room.eventGradeLevel}
+												{#if room.divisionId !== null}· Division {room.divisionId}{/if}
+												{#if room.robotEventsSku}· {room.robotEventsSku}{/if}
+												{#if room.groupId}· In an event group{/if}
+											</span>
+										</span>
+										<!--
 										Last active first, because it is the question this list is for: which
 										events are still in use, and which are heading for retention. "Setup
 										changed" is what the old "Updated" line actually meant — the registry
@@ -461,17 +745,18 @@
 										judging — so it stayed at the creation time on a room that was set up
 										once and then used all weekend.
 									-->
-									<span class="shrink-0 text-right text-xs text-gray-400">
-										<span class="block">Last active {formatActivity(room.lastActivityAt)}</span>
-										<span class="block">Created {formatDate(room.createdAt)}</span>
-										<span class="block">Setup changed {formatDate(room.updatedAt)}</span>
-									</span>
-								</button>
-							</li>
-						{/each}
-					</ul>
-				{/if}
-			</div>
+										<span class="shrink-0 text-right text-xs text-gray-400">
+											<span class="block">Last active {formatActivity(room.lastActivityAt)}</span>
+											<span class="block">Created {formatDate(room.createdAt)}</span>
+											<span class="block">Setup changed {formatDate(room.updatedAt)}</span>
+										</span>
+									</button>
+								</li>
+							{/each}
+						</ul>
+					{/if}
+				</div>
+			{/if}
 		{/if}
 	</div>
 </div>

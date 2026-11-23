@@ -23,6 +23,8 @@ export const metadata = sqliteTable('Metadata', {
 	robotEventsEventId: integer('robotEventsEventId'), // nullable, for example: 58288
 	divisionId: integer('divisionId'), // nullable, for example: 1
 	eventName: text('eventName').notNull(),
+	/** Short name for the event switcher, set by the Judge Advisor; null shows eventName. */
+	eventNickname: text('eventNickname'),
 	program: text('program', { enum: ['V5RC', 'VIQRC', 'VURC'] }).notNull(),
 	eventGradeLevel: text('eventGradeLevel', { enum: ['ES Only', 'MS Only', 'HS Only', 'Blended', 'College Only'] }).notNull(),
 	judgingMethod: text('judgingMethod', { enum: ['assigned', 'walk_in'] }).notNull(),

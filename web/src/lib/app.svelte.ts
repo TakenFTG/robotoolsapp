@@ -8,7 +8,7 @@ import {
 } from '@robotools.app/wrpc/client';
 import type { Judge, JudgeGroup } from '@robotools.app/protocol/src/judging';
 import type { DeviceInfo } from '@robotools.app/protocol/src/client';
-import type { EssentialData } from '@robotools.app/protocol/src/event';
+import { EVENT_NICKNAME_MAX_LENGTH, type EssentialData } from '@robotools.app/protocol/src/event';
 import type { TeamData, TeamInfo, TeamScreening, TeamScreeningUpdate } from '@robotools.app/protocol/src/team';
 import type { Award } from '@robotools.app/protocol/src/award';
 import type { ServerRouter } from '@robotools.app/worker/src/server-router';
@@ -107,6 +107,8 @@ export const PermitSchema = z.object({
 	authToken: AuthTokenSchema.optional(),
 	/** Cached for the event switcher, so rooms can be labelled without connecting to each. */
 	eventName: z.string().max(200).optional(),
+	/** The Judge Advisor's short name for the room, cached alongside eventName. */
+	eventNickname: z.string().max(EVENT_NICKNAME_MAX_LENGTH).optional(),
 	/**
 	 * Set when this room came from an EventGroup's division list rather than its own link,
 	 * so the switcher can group the divisions of one competition together.
@@ -425,6 +427,23 @@ export class App {
 	 * group says so — a permit for it is something this device makes when it first opens
 	 * that division, and its absence must never hide the division from the list.
 	 */
+	/**
+	 * The short name the Judge Advisor gave a room, as this device last saw it. Cached on the
+	 * permit like the event name, so the switcher can show it without connecting.
+	 */
+	getEventNickname(roomId: string): string | null {
+		return this.permits.find((permit) => permit.roomId === roomId)?.eventNickname ?? null;
+	}
+
+	/**
+	 * Set the open room's short name for every judge, or clear it with an empty name.
+	 * Judge Advisor only; the server says no to anyone else.
+	 */
+	async setEventNickname(nickname: string | null): Promise<void> {
+		const trimmed = nickname?.trim().slice(0, EVENT_NICKNAME_MAX_LENGTH).trim() || null;
+		await this.wrpcClient.essential.setEventNickname.mutation({ nickname: trimmed });
+	}
+
 	getGroupDivisions(groupId: string): readonly GroupDivision[] {
 		const permit = this.groupPermits.find((candidate) => candidate.groupId === groupId);
 		return permit?.divisions ? ($state.snapshot(permit.divisions) as GroupDivision[]) : [];
@@ -995,8 +1014,10 @@ export class App {
 		// Cache the name on the permit so the event switcher can label this room without
 		// connecting to it. Doing it here rather than only on join means a freshly created
 		// room, and any later rename, are both picked up.
-		if (this.permit && this.permit.eventName !== data.eventName) {
+		const nickname = data.eventNickname ?? undefined;
+		if (this.permit && (this.permit.eventName !== data.eventName || this.permit.eventNickname !== nickname)) {
 			this.permit.eventName = data.eventName;
+			this.permit.eventNickname = nickname;
 			this.savePermitToStorage();
 		}
 	}

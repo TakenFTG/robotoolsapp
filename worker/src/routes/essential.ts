@@ -1,6 +1,8 @@
 import type { EssentialData } from '@robotools.app/protocol/src/event';
 import { announceAudit, recordAudit } from '../audit/log';
-import { EssentialDataSchema } from '@robotools.app/protocol/src/event';
+import { EssentialDataSchema, EventNicknameSchema } from '@robotools.app/protocol/src/event';
+import { z } from 'zod';
+import { DIVISION_LABEL_MAX_LENGTH } from '@robotools.app/protocol/src/group';
 import { awards, judgeGroups, judgeGroupsAssignedTeams, metadata, teams } from '../db/schema';
 import type { DatabaseOrTransaction, ServerContext } from '../server-router';
 import type { Award, AwardType } from '@robotools.app/protocol/src/award';
@@ -90,6 +92,7 @@ export async function getEssentialData(db: DatabaseOrTransaction): Promise<Essen
 			robotEventsEventId: metadataRows[0].robotEventsEventId,
 			divisionId: metadataRows[0].divisionId,
 			eventName: metadataRows[0].eventName,
+			eventNickname: metadataRows[0].eventNickname,
 			program: metadataRows[0].program,
 			eventGradeLevel: metadataRows[0].eventGradeLevel,
 			judgingMethod: metadataRows[0].judgingMethod,
@@ -198,7 +201,7 @@ export async function updateEssentialData(db: DatabaseOrTransaction, essentialDa
 	return transaction(db, async (tx) => {
 		// Metadata is replaced wholesale from EssentialData, which the client owns and which
 		// deliberately knows nothing about groups, ref links or retention. Read those first and
-		// put them back, or every trip through event setup would quietly detach the room from
+		// put them back — the nickname too, which has its own call — or every trip through event setup would quietly detach the room from
 		// its group and its referee notes, and reset its retention clock.
 		const [existing] = await tx
 			.select({
@@ -206,7 +209,8 @@ export async function updateEssentialData(db: DatabaseOrTransaction, essentialDa
 				retentionWarningSentAt: metadata.retentionWarningSentAt,
 				lastActivityAt: metadata.lastActivityAt,
 				linkedRefRoomId: metadata.linkedRefRoomId,
-				linkedRefEventName: metadata.linkedRefEventName
+				linkedRefEventName: metadata.linkedRefEventName,
+				eventNickname: metadata.eventNickname
 			})
 			.from(metadata)
 			.limit(1);
@@ -214,6 +218,8 @@ export async function updateEssentialData(db: DatabaseOrTransaction, essentialDa
 		await tx.delete(metadata);
 		await tx.insert(metadata).values({
 			...essentialData,
+			// Owned by setEventNickname, not by setup; see EssentialDataSchema.
+			eventNickname: existing?.eventNickname ?? null,
 			groupId: existing?.groupId ?? null,
 			retentionWarningSentAt: existing?.retentionWarningSentAt ?? null,
 			lastActivityAt: existing?.lastActivityAt ?? null,
@@ -299,16 +305,76 @@ export function buildEssentialRoute(w: WRPCRootObject<object, ServerContext, Rec
 			}
 
 			// Do not wait for the broadcast to complete
-			transaction(ctx.db, async (tx) => {
-				return {
-					essentialData: await getEssentialData(tx),
-					teamData: await getTeamData(tx),
-					judges: await getJudges(tx),
-					finalAwardNominations: await getFinalAwardNominations(tx)
-				} satisfies RoomState;
-			}).then((message) => {
+			void readRoomState(ctx.db).then((message) => {
 				session.broadcast<ClientRouter>().onEventSetupUpdate.mutation(message);
 			});
-		})
+		}),
+
+		/**
+		 * Give the event a short name for every judge's event switcher, or clear it with null.
+		 *
+		 * Its own call rather than part of event setup so a Judge Advisor can set it from the
+		 * switcher, where the long name is the problem, without walking through setup.
+		 */
+		setEventNickname: w.procedure
+			.input(z.object({ nickname: EventNicknameSchema.nullable() }))
+			.mutation(async ({ ctx, input, session }) => {
+				if (await ctx.network.isAccessControlEnabled()) {
+					assertAuthenticatedJudgeAdvisor(ctx.auth);
+				}
+				if (!(await hasEssentialData(ctx.db))) {
+					throw new WRPCError('This event has not been set up yet');
+				}
+
+				await storeEventNickname(ctx.db, input.nickname);
+
+				// In an event group the nickname is also the division's label, so group advisors
+				// see the same name. Cleared, the label goes back to the event's own name.
+				const groupId = await getRoomGroupId(ctx.db);
+				if (groupId && ctx.roomId) {
+					const { eventName } = await getEssentialData(ctx.db);
+					const label = input.nickname ?? eventName.slice(0, DIVISION_LABEL_MAX_LENGTH).trim();
+					try {
+						await ctx.network.group.relabel(groupId, ctx.roomId, label);
+					} catch (error) {
+						console.error('Failed to relabel division in its event group:', error);
+					}
+				}
+				announceAudit(ctx.db, session, [
+					await recordAudit(ctx.db, ctx.auth, session, {
+						action: 'event_setup_changed',
+						details: {}
+					})
+				]);
+
+				// Every judge's switcher should pick the new name up without reconnecting.
+				void readRoomState(ctx.db).then((message) => {
+					session.broadcast<ClientRouter>().onEventSetupUpdate.mutation(message);
+				});
+			})
 	};
+}
+
+/**
+ * Store the event's nickname, or clear it with null.
+ *
+ * A nickname the same as the event's own name is stored as no nickname. That is what an
+ * event group's division label usually starts as, and showing the same long name twice in
+ * the switcher helps nobody.
+ */
+export async function storeEventNickname(db: DatabaseOrTransaction, nickname: string | null): Promise<void> {
+	const [row] = await db.select({ eventName: metadata.eventName }).from(metadata).limit(1);
+	await db.update(metadata).set({ eventNickname: nickname && nickname !== row?.eventName ? nickname : null });
+}
+
+/** The room as it now stands, for broadcasting to every client after setup changes. */
+export function readRoomState(db: DatabaseOrTransaction): Promise<RoomState> {
+	return transaction(db, async (tx) => {
+		return {
+			essentialData: await getEssentialData(tx),
+			teamData: await getTeamData(tx),
+			judges: await getJudges(tx),
+			finalAwardNominations: await getFinalAwardNominations(tx)
+		} satisfies RoomState;
+	});
 }

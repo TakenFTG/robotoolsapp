@@ -11,9 +11,12 @@ import {
 } from '@robotools.app/protocol/src/group';
 import { uuidv4 } from '@robotools.app/protocol/src/utils';
 import type { ServerContext } from '../server-router';
+import type { ClientRouter } from '../client-router';
 import { assertAuthenticatedJudgeAdvisor, getJudgeAdvisors } from '../access/tokens';
 import { getRoomGroupId, setRoomGroupId } from '../group/gateway';
 import { broadcastDeviceListUpdate } from './device';
+import { readRoomState, storeEventNickname } from './essential';
+import type { RoomState } from './handshake';
 import { buildAdvisorAccessLinkEmail } from '../email/template';
 import { describeSmtpFailure } from '../email/smtp';
 
@@ -69,7 +72,7 @@ export function buildGroupRoute(w: WRPCRootObject<object, ServerContext, Record<
 				})
 			)
 			.output(z.object({ groupId: GroupIdSchema, authToken: AuthTokenSchema }))
-			.mutation(async ({ ctx, input }) => {
+			.mutation(async ({ ctx, input, session }) => {
 				assertAuthenticatedJudgeAdvisor(ctx.auth);
 				assertRoomOwnAdvisor(ctx, 'create an event group');
 
@@ -106,6 +109,7 @@ export function buildGroupRoute(w: WRPCRootObject<object, ServerContext, Record<
 				}
 
 				await setRoomGroupId(ctx.db, groupId);
+				await applyDivisionLabel(ctx, input.divisionLabel, (state) => session.broadcast<ClientRouter>().onEventSetupUpdate.mutation(state));
 
 				// Not awaited: this request holds the room's lock, and every judge in the room would
 				// wait on the mail server. It is best-effort and swallows its own failures.
@@ -168,6 +172,7 @@ export function buildGroupRoute(w: WRPCRootObject<object, ServerContext, Record<
 				}
 
 				await setRoomGroupId(ctx.db, input.groupId);
+				await applyDivisionLabel(ctx, input.divisionLabel, (state) => session.broadcast<ClientRouter>().onEventSetupUpdate.mutation(state));
 
 				// If the group's divisions are linked to a ref room, this one joins that link too.
 				ctx.refLink.joinedGroup(ctx.roomId, input.groupId);
@@ -283,4 +288,13 @@ function assertRoomOwnAdvisor(ctx: ServerContext, action: string): void {
 	if (getGroupOrigin(ctx.auth.authentication)) {
 		throw new WRPCError(`Only a Judge Advisor of this division can ${action}`);
 	}
+}
+
+/**
+ * The label a division goes by in its group doubles as the room's nickname, so judges who
+ * hold only this room's link see the same short name in their event switcher.
+ */
+async function applyDivisionLabel(ctx: ServerContext, label: string, broadcast: (state: RoomState) => unknown): Promise<void> {
+	await storeEventNickname(ctx.db, label);
+	void readRoomState(ctx.db).then(broadcast);
 }

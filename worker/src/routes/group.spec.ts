@@ -64,7 +64,8 @@ function createRecordingGateway() {
 		async detach(_groupId, roomId) {
 			calls.detached.push(roomId);
 			rooms.delete(roomId);
-		}
+		},
+		async relabel() {}
 	};
 
 	return { calls, rooms, gateway };

@@ -22,6 +22,19 @@
 		return role ? `${event.refName} (${role})` : event.refName;
 	}
 
+	async function rename(event: SavedRefEvent) {
+		const nickname = await dialogs.showPrompt({
+			title: m.event_nickname_title(),
+			message: m.ref_event_nickname_message({ name: event.eventName ?? m.ref_event_unnamed() }),
+			defaultValue: event.nickname ?? '',
+			placeholder: m.event_nickname_placeholder(),
+			confirmText: m.event_nickname_save()
+		});
+		if (nickname !== null) {
+			refApp.setEventNickname(event.roomId, nickname);
+		}
+	}
+
 	async function forget(event: SavedRefEvent) {
 		const current = event.roomId === currentRoomId;
 		const confirmed = await dialogs.showConfirmation({
@@ -52,11 +65,17 @@
 				aria-current={current ? 'true' : undefined}
 				onclick={() => onOpen(event.roomId)}
 			>
-				<span class="block truncate text-title-medium">{event.eventName ?? m.ref_event_unnamed()}</span>
+				<span class="block truncate text-title-medium">{event.nickname ?? event.eventName ?? m.ref_event_unnamed()}</span>
+				{#if event.nickname && event.eventName}
+					<span class="block truncate text-body-small opacity-80">{event.eventName}</span>
+				{/if}
 				<span class="block truncate text-body-small opacity-80">
 					{[current ? m.ref_event_open_now() : null, person].filter(Boolean).join(' · ')}
 				</span>
 			</button>
+			<Button variant="text" compact onclick={() => rename(event)}>
+				{m.event_nickname_rename()}
+			</Button>
 			<Button variant="text" compact onclick={() => forget(event)}>
 				{current ? m.ref_sign_out() : m.ref_forget_event()}
 			</Button>

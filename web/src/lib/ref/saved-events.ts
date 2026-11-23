@@ -13,12 +13,20 @@ import { AuthTokenSchema } from '@robotools.app/protocol/src/access';
  * the list has something to show before connecting. The room is always the authority.
  */
 
+export const REF_EVENT_NICKNAME_MAX_LENGTH = 40;
+
 export const SavedRefEventSchema = z.object({
 	roomId: RefRoomIdSchema,
 	authToken: AuthTokenSchema,
 	eventName: z.string().nullable(),
 	refName: z.string().nullable(),
 	role: RefereeRoleSchema.nullable(),
+	/**
+	 * A short name this device gives the event, for the list. Official names run long and
+	 * the part that tells an MS and an HS event apart is at the end, where it is cut off.
+	 * Absent in lists saved before nicknames existed.
+	 */
+	nickname: z.string().min(1).max(REF_EVENT_NICKNAME_MAX_LENGTH).nullable().catch(null),
 	lastOpenedAt: z.number()
 });
 export type SavedRefEvent = z.infer<typeof SavedRefEventSchema>;
@@ -52,7 +60,9 @@ export function readSavedEvents(listJson: string | null, legacyPermitJson: strin
 			const roomId = RefRoomIdSchema.safeParse(raw?.roomId);
 			const authToken = AuthTokenSchema.safeParse(raw?.authToken);
 			if (roomId.success && authToken.success) {
-				return [{ roomId: roomId.data, authToken: authToken.data, eventName: null, refName: null, role: null, lastOpenedAt: 0 }];
+				return [
+					{ roomId: roomId.data, authToken: authToken.data, eventName: null, refName: null, role: null, nickname: null, lastOpenedAt: 0 }
+				];
 			}
 		} catch {
 			// Nothing usable.
@@ -78,6 +88,8 @@ export function upsertLink(events: SavedRefEvent[], link: RefLink, now: number):
 		// A different link may belong to a different person, so their name is not carried over.
 		refName: sameToken ? (existing?.refName ?? null) : null,
 		role: sameToken ? (existing?.role ?? null) : null,
+		// The nickname names the event, not the person, so it survives a new link.
+		nickname: existing?.nickname ?? null,
 		lastOpenedAt: now
 	};
 	return [entry, ...events.filter((event) => event.roomId !== link.roomId)];
@@ -90,6 +102,12 @@ export function describeEvent(
 	details: Pick<SavedRefEvent, 'eventName' | 'refName' | 'role'>
 ): SavedRefEvent[] {
 	return events.map((event) => (event.roomId === roomId ? { ...event, ...details } : event));
+}
+
+/** Set this device's short name for an event; an empty name clears it. */
+export function nameEvent(events: SavedRefEvent[], roomId: string, nickname: string | null): SavedRefEvent[] {
+	const trimmed = nickname?.trim().slice(0, REF_EVENT_NICKNAME_MAX_LENGTH) || null;
+	return events.map((event) => (event.roomId === roomId ? { ...event, nickname: trimmed } : event));
 }
 
 export function removeEvent(events: SavedRefEvent[], roomId: string): SavedRefEvent[] {

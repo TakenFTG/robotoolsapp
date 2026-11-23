@@ -92,7 +92,8 @@ function createFakeGroup() {
 
 		async detach(groupId, roomId) {
 			state.rooms.delete(roomId);
-		}
+		},
+		async relabel() {}
 	};
 
 	return { state, gateway };

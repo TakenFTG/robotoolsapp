@@ -19,10 +19,12 @@ export const GroupNameSchema = z
 	.regex(/^\S.*\S$|^\S$/, { message: 'Group name must not have leading or trailing whitespace' });
 
 /** What a member room is called inside the group — "Science Division", "Division 2". */
+export const DIVISION_LABEL_MAX_LENGTH = 100;
+
 export const DivisionLabelSchema = z
 	.string()
 	.nonempty()
-	.max(100)
+	.max(DIVISION_LABEL_MAX_LENGTH)
 	.regex(/^\S.*\S$|^\S$/, { message: 'Division label must not have leading or trailing whitespace' });
 
 /**

@@ -4,6 +4,7 @@
 	import type { Permit } from '$lib/app.svelte';
 	import { parseEventGroupUrl } from '$lib/utils.svelte';
 	import { onMount } from 'svelte';
+	import EditIcon from '$lib/icon/EditIcon.svelte';
 
 	const permits = $derived(app.getPermits());
 	const activeRoomId = $derived(app.getActiveRoomId());
@@ -27,7 +28,11 @@
 				roomId: division.roomId,
 				// The room's own name once it has been opened, since that is what the Judge
 				// Advisor sees inside it; the group's label until then.
-				label: permits.find((permit) => permit.roomId === division.roomId)?.eventName ?? division.label
+				label: permits.find((permit) => permit.roomId === division.roomId)?.eventName ?? division.label,
+				// The group's label is the room's nickname, and the group is the fresher copy:
+				// a division renamed from another device reaches this one's permit only once
+				// the room is opened here again.
+				groupLabel: division.label
 			}))
 		}));
 	});
@@ -140,12 +145,70 @@
 		return permit.eventName ?? m.judges_room();
 	}
 
+	/**
+	 * Give the open room a short name every judge sees here. In an event group it is also the
+	 * division's label, so group advisors see it too. Clearing the box goes back to
+	 * the event's own name. Only for the room this device is connected to, since that is the
+	 * room it can tell; every other screen keeps the official name.
+	 */
+	async function rename(fullName: string) {
+		const nickname = await dialogs.showPrompt({
+			title: m.event_nickname_title(),
+			message: m.event_nickname_message({ name: fullName }),
+			defaultValue: activeRoomId ? (app.getEventNickname(activeRoomId) ?? '') : '',
+			placeholder: m.event_nickname_placeholder(),
+			confirmText: m.event_nickname_save()
+		});
+		if (nickname === null) return;
+		await run(async () => {
+			await app.setEventNickname(nickname);
+			// In a group this also renamed the division; show the group's new label.
+			await app.refreshEventGroups();
+		});
+	}
+
 	// Divisions are added and removed at the group, often from someone else's device, so
 	// ask before showing the list rather than trusting whatever was cached last time.
 	onMount(() => {
 		void app.refreshEventGroups();
 	});
 </script>
+
+<!--
+	One row per room. A nickname, when the Judge Advisor has set one, leads, and the full name moves
+	underneath (where the room id otherwise sits) so the official name is still there to
+	check against.
+-->
+{#snippet room(roomId: string, fullName: string, open: () => unknown, groupLabel: string | null = null)}
+	{@const nickname = groupLabel ? (groupLabel !== fullName ? groupLabel : null) : app.getEventNickname(roomId)}
+	<li class="flex items-center">
+		<button
+			class="flex min-w-0 flex-1 items-center justify-between gap-3 py-2.5 pr-3 pl-3 text-left hover:bg-gray-50 disabled:opacity-60"
+			onclick={open}
+			disabled={busy}
+			title={fullName}
+		>
+			<span class="min-w-0">
+				<span class="block truncate text-sm font-medium text-gray-900">{nickname ?? fullName}</span>
+				<span class="block truncate text-xs text-gray-500">{nickname ? fullName : roomId.slice(0, 8)}</span>
+			</span>
+			{#if roomId === activeRoomId}
+				<span class="shrink-0 rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700">{m.current()}</span>
+			{/if}
+		</button>
+		{#if isJudgeAdvisor && roomId === activeRoomId}
+			<button
+				class="mx-1 shrink-0 rounded-md p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700 disabled:opacity-60"
+				onclick={() => rename(fullName)}
+				disabled={busy}
+				aria-label={m.event_nickname_title()}
+				title={m.event_nickname_title()}
+			>
+				<EditIcon size={14} />
+			</button>
+		{/if}
+	</li>
+{/snippet}
 
 <div class="space-y-4">
 	<p class="text-sm text-gray-600">{m.switch_event_description()}</p>
@@ -168,21 +231,7 @@
 			{:else}
 				<ul class="divide-y divide-gray-100 rounded border border-gray-200">
 					{#each section.divisions as division (division.roomId)}
-						<li>
-							<button
-								class="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left hover:bg-gray-50 disabled:opacity-60"
-								onclick={() => switchToDivision(section.groupId, division.roomId)}
-								disabled={busy}
-							>
-								<span class="min-w-0">
-									<span class="block truncate text-sm font-medium text-gray-900">{division.label}</span>
-									<span class="block truncate text-xs text-gray-500">{division.roomId.slice(0, 8)}</span>
-								</span>
-								{#if division.roomId === activeRoomId}
-									<span class="shrink-0 rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700">{m.current()}</span>
-								{/if}
-							</button>
-						</li>
+						{@render room(division.roomId, division.label, () => switchToDivision(section.groupId, division.roomId), division.groupLabel)}
 					{/each}
 				</ul>
 			{/if}
@@ -196,21 +245,7 @@
 			{/if}
 			<ul class="divide-y divide-gray-100 rounded border border-gray-200">
 				{#each standaloneRooms as permit (permit.roomId)}
-					<li>
-						<button
-							class="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left hover:bg-gray-50 disabled:opacity-60"
-							onclick={() => switchTo(permit.roomId)}
-							disabled={busy}
-						>
-							<span class="min-w-0">
-								<span class="block truncate text-sm font-medium text-gray-900">{labelFor(permit)}</span>
-								<span class="block truncate text-xs text-gray-500">{permit.roomId.slice(0, 8)}</span>
-							</span>
-							{#if permit.roomId === activeRoomId}
-								<span class="shrink-0 rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700">{m.current()}</span>
-							{/if}
-						</button>
-					</li>
+					{@render room(permit.roomId, labelFor(permit), () => switchTo(permit.roomId))}
 				{/each}
 			</ul>
 		</div>

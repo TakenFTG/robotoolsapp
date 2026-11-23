@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { describeEvent, readSavedEvents, removeEvent, upsertLink, type SavedRefEvent } from './saved-events';
+import { describeEvent, nameEvent, readSavedEvents, removeEvent, upsertLink, type SavedRefEvent } from './saved-events';
 
 const ROOM_A = '6f1c2a8e-3b4d-4c5e-9f60-718293a4b5c6';
 const ROOM_B = '0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d';
@@ -7,13 +7,24 @@ const TOKEN_1 = 'a'.repeat(12);
 const TOKEN_2 = 'b'.repeat(12);
 
 function saved(overrides: Partial<SavedRefEvent>): SavedRefEvent {
-	return { roomId: ROOM_A, authToken: TOKEN_1, eventName: 'MS comp', refName: 'Sam', role: 'head_referee', lastOpenedAt: 1, ...overrides };
+	return {
+		roomId: ROOM_A,
+		authToken: TOKEN_1,
+		eventName: 'MS comp',
+		refName: 'Sam',
+		role: 'head_referee',
+		nickname: null,
+		lastOpenedAt: 1,
+		...overrides
+	};
 }
 
 describe('saved ref events', () => {
 	it('moves the single link older versions saved into the list', () => {
 		const events = readSavedEvents(null, JSON.stringify({ roomId: ROOM_A, authToken: TOKEN_1 }));
-		expect(events).toEqual([{ roomId: ROOM_A, authToken: TOKEN_1, eventName: null, refName: null, role: null, lastOpenedAt: 0 }]);
+		expect(events).toEqual([
+			{ roomId: ROOM_A, authToken: TOKEN_1, eventName: null, refName: null, role: null, nickname: null, lastOpenedAt: 0 }
+		]);
 	});
 
 	it('prefers the list over the old link once there is one', () => {
@@ -52,5 +63,21 @@ describe('saved ref events', () => {
 
 	it('removes one event and leaves the others', () => {
 		expect(removeEvent([saved({}), saved({ roomId: ROOM_B })], ROOM_A).map((event) => event.roomId)).toEqual([ROOM_B]);
+	});
+
+	it('reads lists saved before nicknames existed', () => {
+		const { nickname: _, ...old } = saved({});
+		expect(readSavedEvents(JSON.stringify([old]), null)).toEqual([saved({})]);
+	});
+
+	it('keeps the nickname when the event gets a new link', () => {
+		const events = upsertLink([saved({ nickname: 'Nats MS' })], { roomId: ROOM_A, authToken: TOKEN_2 }, 10);
+		expect(events[0].nickname).toBe('Nats MS');
+	});
+
+	it('sets, trims and clears a nickname', () => {
+		const named = nameEvent([saved({}), saved({ roomId: ROOM_B })], ROOM_A, '  Nats MS  ');
+		expect(named.map((event) => event.nickname)).toEqual(['Nats MS', null]);
+		expect(nameEvent(named, ROOM_A, '   ')[0].nickname).toBeNull();
 	});
 });

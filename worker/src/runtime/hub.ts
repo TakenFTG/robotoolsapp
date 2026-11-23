@@ -17,6 +17,7 @@ import { buildRefAccessLinkEmail } from '../email/template';
 import { describeSmtpFailure } from '../email/smtp';
 import { DataDirectory, migrationsPath, openDatabase, type OpenDatabase } from './storage';
 import type { EmailContext } from '../server-router';
+import type { AdminRefRoomSummary } from '@robotools.app/protocol/src/admin';
 
 /**
  * How long an empty room file is left alone before it is treated as abandoned.
@@ -730,6 +731,14 @@ export class Hub {
 					.catch((error) => {
 						console.error('Failed to clear groupId on room', roomId, error);
 					});
+			},
+			setDivisionNickname: async (roomId, groupId, label) => {
+				const room = this.room(roomId);
+				void room.mutex
+					.run(() => room.setNicknameFromGroup(groupId, label))
+					.catch((error) => {
+						console.error('Failed to set nickname on room', roomId, error);
+					});
 			}
 		};
 	}
@@ -749,7 +758,8 @@ export class Hub {
 			advisorCount: (groupId, roomId) => on(groupId, (group) => group.advisorCountForRoom({ roomId })),
 			create: (groupId, input) => on(groupId, (group) => group.createGroup({ groupId, ...input })),
 			attach: (groupId, input) => on(groupId, (group) => group.attachRoom(input)),
-			detach: (groupId, roomId) => on(groupId, (group) => group.detachRoom({ roomId }))
+			detach: (groupId, roomId) => on(groupId, (group) => group.detachRoom({ roomId })),
+			relabel: (groupId, roomId, label) => on(groupId, (group) => group.relabelRoom({ roomId, label }))
 		};
 	}
 
@@ -790,6 +800,29 @@ export class Hub {
 			});
 		}
 		return this.adminRegistry;
+	}
+
+	/**
+	 * Every ref room on disk, for the operator's list.
+	 *
+	 * Read from the files rather than the registry: ref rooms were never registered, and
+	 * their folder is the whole truth. A file with no event in it is skipped, not listed.
+	 */
+	async adminRefRooms(): Promise<AdminRefRoomSummary[]> {
+		const summaries: AdminRefRoomSummary[] = [];
+		for (const refRoomId of this.data.listRefRoomIds()) {
+			try {
+				const room = this.refRoom(refRoomId);
+				const summary = room ? await room.mutex.run(() => room.adminSummary()) : null;
+				if (summary) {
+					summaries.push(summary);
+				}
+			} catch (error) {
+				// One unreadable room must not hide the rest.
+				console.error('Failed to read ref room for admin', refRoomId, error);
+			}
+		}
+		return summaries.sort((a, b) => a.eventName.localeCompare(b.eventName));
 	}
 
 	/** Run a registry action under its lock. */

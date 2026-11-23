@@ -26,7 +26,16 @@ import { generateUUID } from '$lib/utils.svelte';
 import { SvelteURL } from 'svelte/reactivity';
 import { AuthTokenSchema } from '@robotools.app/protocol/src/access';
 import type { EmailCapability } from '@robotools.app/protocol/src/email';
-import { describeEvent, readSavedEvents, removeEvent, sortByRecent, upsertLink, type RefLink, type SavedRefEvent } from './saved-events';
+import {
+	describeEvent,
+	nameEvent,
+	readSavedEvents,
+	removeEvent,
+	sortByRecent,
+	upsertLink,
+	type RefLink,
+	type SavedRefEvent
+} from './saved-events';
 
 /**
  * The referee app's state and its one connection to a ref room.
@@ -477,6 +486,13 @@ export class RefApp {
 		this.disconnect();
 		this.clearState();
 		this.leaving = false;
+	}
+
+	/** Give a saved event a short name on this device, or clear it with an empty name. */
+	setEventNickname(roomId: string, nickname: string | null): void {
+		// Not saveEvents: that re-sorts by last opened, which naming an event does not change.
+		this.savedEvents = nameEvent(this.savedEvents, roomId, nickname);
+		writeStorage(EVENTS_KEY, JSON.stringify(this.savedEvents));
 	}
 
 	private loadSavedEvents(): void {

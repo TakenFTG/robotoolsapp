@@ -35,11 +35,34 @@ export const EventNameSchema = z
 	.max(EVENT_NAME_MAX_LENGTH)
 	.regex(/^\S.*\S$|^\S$/, { message: 'Event name must not have leading or trailing whitespace' });
 
+/**
+ * A short name the Judge Advisor gives the event, shown to every judge in the event switcher.
+ *
+ * Official names run long — "VEX Robotics 2026-2027 Australian National Championships VEX V5
+ * Robotics Competition - Override™ (Middle School)" — and the part that tells divisions apart
+ * is at the end, where a list truncates it.
+ *
+ * In an event group, the division label is the nickname, so the two share a length limit.
+ */
+export const EVENT_NICKNAME_MAX_LENGTH = 100;
+
+export const EventNicknameSchema = z
+	.string()
+	.nonempty()
+	.max(EVENT_NICKNAME_MAX_LENGTH)
+	.regex(/^\S.*\S$|^\S$/, { message: 'Event nickname must not have leading or trailing whitespace' });
+
 export const EssentialDataSchema = z.object({
 	robotEventsSku: RobotEventsSkuSchema.nullable(),
 	robotEventsEventId: RobotEventsEventIdSchema.nullable(),
 	divisionId: DivisionIdSchema.nullable(),
 	eventName: EventNameSchema,
+	/**
+	 * Set only through its own call, never by event setup: setup sends the whole of this
+	 * object back, and a form that does not show the nickname must not be able to clear it.
+	 * Optional so setup, and clients from before nicknames, need not send it at all.
+	 */
+	eventNickname: EventNicknameSchema.nullable().optional(),
 	program: ProgramSchema,
 	eventGradeLevel: EventGradeLevelSchema,
 	judgingMethod: JudgingMethodSchema,

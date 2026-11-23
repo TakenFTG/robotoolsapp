@@ -8,7 +8,7 @@ import { judgeAdvisors, judges, metadata, teams } from '../db/schema';
 import { Authentication } from '../access/authentication';
 import { JudgesRoomNetwork, type WsAttachment } from '../network/judges-room-network';
 import { countJudgeAdvisors, generateAuthToken, getJudgeAdvisors, upsertJudgeAdvisorAuthToken } from '../access/tokens';
-import { getJudgeGroups } from '../routes/essential';
+import { getJudgeGroups, readRoomState, storeEventNickname } from '../routes/essential';
 import { getJudges, upsertJudge } from '../routes/judge';
 import { broadcastDeviceListUpdate, cancelDeviceListBroadcast } from '../routes/device';
 import { clearAllSubscriptions, unsubscribeTopics } from '../routes/subscriptions';
@@ -517,6 +517,21 @@ export class Room {
 
 	async clearGroupId(groupId: string): Promise<void> {
 		await clearRoomGroupId(this.db, groupId);
+	}
+
+	/**
+	 * Take the group's label for this division as its nickname, so judges who hold only this
+	 * room's link see the same short name the group advisors gave it.
+	 *
+	 * Only from the group this room belongs to: a stale call from a group it has since left
+	 * must not rename it.
+	 */
+	async setNicknameFromGroup(groupId: string, label: string): Promise<void> {
+		if ((await getRoomGroupId(this.db)) !== groupId) {
+			return;
+		}
+		await storeEventNickname(this.db, label);
+		void readRoomState(this.db).then((message) => this.wsHandler.broadcast<ClientRouter>().onEventSetupUpdate.mutation(message));
 	}
 
 	async kickGroupAdvisor(groupAdvisorId: string, exceptDeviceId: string | null): Promise<void> {

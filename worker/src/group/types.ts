@@ -42,6 +42,8 @@ export interface EventGroupGateway {
 		input: { authToken: string; roomId: string; label: string }
 	): Promise<{ ok: true } | { ok: false; error: string }>;
 	detach(groupId: string, roomId: string): Promise<void>;
+	/** A member room's nickname changed; it is also the room's division label. */
+	relabel(groupId: string, roomId: string, label: string): Promise<void>;
 }
 
 /**
@@ -64,5 +66,6 @@ export const noEventGroupGateway: EventGroupGateway = {
 	async attach() {
 		return { ok: false, error: 'Event groups are not available on this server' };
 	},
-	async detach() {}
+	async detach() {},
+	async relabel() {}
 };

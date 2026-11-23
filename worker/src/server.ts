@@ -466,6 +466,60 @@ export function createServer(options: ServerOptions): { server: http.Server; hub
 				sendJson(res, 200, { kind: 'access_link', authToken } satisfies AdminResponse);
 				return;
 			}
+			case 'list_ref_rooms': {
+				sendJson(res, 200, { kind: 'ref_rooms', refRooms: await hub.adminRefRooms() } satisfies AdminResponse);
+				return;
+			}
+			case 'ref_room_detail': {
+				// Never create: a stale id from an old list must not leave an empty file behind.
+				const refRoom = hub.refRoom(action.refRoomId);
+				const detail = refRoom ? await refRoom.mutex.run(() => refRoom.adminDetail()) : null;
+				if (!detail) {
+					sendJson(res, 404, { error: 'Ref room not found' });
+					return;
+				}
+				sendJson(res, 200, { kind: 'ref_room', refRoom: detail } satisfies AdminResponse);
+				return;
+			}
+			case 'destroy_ref_room': {
+				const refRoom = hub.refRoom(action.refRoomId);
+				if (!refRoom) {
+					sendJson(res, 404, { error: 'Ref room not found' });
+					return;
+				}
+				// The ref room may wait on a Judges' Room's lock while it unlinks its divisions,
+				// which is the permitted direction. See ref/link-gateway.ts.
+				await refRoom.mutex.run(() => refRoom.destroy());
+				sendJson(res, 200, { kind: 'ok' } satisfies AdminResponse);
+				return;
+			}
+			case 'add_referee': {
+				const refRoom = hub.refRoom(action.refRoomId);
+				if (!refRoom) {
+					sendJson(res, 404, { error: 'Ref room not found' });
+					return;
+				}
+				const authToken = await refRoom.mutex.run(() => refRoom.adminAddReferee(action.name, action.role));
+				// Returned once. The room keeps the token; nothing here can show it again.
+				sendJson(res, 200, { kind: 'access_link', authToken } satisfies AdminResponse);
+				return;
+			}
+			case 'remove_referee': {
+				const refRoom = hub.refRoom(action.refRoomId);
+				if (!refRoom) {
+					sendJson(res, 404, { error: 'Ref room not found' });
+					return;
+				}
+				try {
+					await refRoom.mutex.run(() => refRoom.adminRemoveReferee(action.refereeId));
+				} catch (error) {
+					// "Keep at least one Head Referee" is an answer for the operator, not a fault.
+					sendJson(res, 400, { error: error instanceof Error ? error.message : 'Could not remove that referee' });
+					return;
+				}
+				sendJson(res, 200, { kind: 'ok' } satisfies AdminResponse);
+				return;
+			}
 			case 'remove_judge_advisor': {
 				const room = hub.room(action.roomId);
 				try {

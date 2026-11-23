@@ -163,6 +163,43 @@ describe('access control', () => {
 		).rejects.toThrow(/Judge Advisor/);
 	});
 
+	it('lets only the Judge Advisor set the event nickname, and setup keeps it', async () => {
+		const links = await enableAccessControl();
+		const judgeCtx = await ctxWithAuth(links.judges[0]!.authToken);
+
+		await expect(
+			serverRouter.essential.setEventNickname._def._resolver!({
+				input: { nickname: 'Nats MS' },
+				session: judgeSession,
+				ctx: judgeCtx
+			})
+		).rejects.toThrow(/Judge Advisor/);
+		expect((await getEssentialData(context.db)).eventNickname).toBeNull();
+
+		await serverRouter.essential.setEventNickname._def._resolver!({
+			input: { nickname: 'Nats MS' },
+			session: jaSession,
+			ctx: context
+		});
+		expect((await getEssentialData(context.db)).eventNickname).toBe('Nats MS');
+
+		// Setup sends the whole event back without the nickname; it must survive.
+		const { eventNickname: _, ...essential } = await getEssentialData(context.db);
+		await serverRouter.essential.updateEssentialData._def._resolver!({
+			input: { ...essential, eventName: 'Renamed' },
+			session: jaSession,
+			ctx: context
+		});
+		expect((await getEssentialData(context.db)).eventNickname).toBe('Nats MS');
+
+		await serverRouter.essential.setEventNickname._def._resolver!({
+			input: { nickname: null },
+			session: jaSession,
+			ctx: context
+		});
+		expect((await getEssentialData(context.db)).eventNickname).toBeNull();
+	});
+
 	it('rejects spoofed JA deviceId without connection auth', async () => {
 		await enableAccessControl();
 		const spoofSession = makeSession(jaDeviceId);

@@ -40,6 +40,8 @@ export type { GroupDescription, GroupSessionValidation } from './types';
 export interface GroupRoomAccess {
 	kickGroupAdvisor(roomId: string, groupAdvisorId: string, exceptDeviceId: string | null): Promise<void>;
 	clearGroupId(roomId: string, groupId: string): Promise<void>;
+	/** The division label is the room's nickname; keep the room's copy in step with it. */
+	setDivisionNickname(roomId: string, groupId: string, label: string): Promise<void>;
 }
 
 /**
@@ -120,6 +122,16 @@ export class EventGroup {
 
 		await upsertGroupRoom(this.db, input.roomId, input.label);
 		return { ok: true };
+	}
+
+	/**
+	 * Take a member room's new nickname as its division label. Asked by the room itself, on
+	 * its Judge Advisor's authority, as detaching is; a room not in the group changes nothing.
+	 */
+	async relabelRoom(input: { roomId: string; label: string }): Promise<void> {
+		if (await isGroupMember(this.db, input.roomId)) {
+			await this.db.update(groupRooms).set({ label: input.label }).where(eq(groupRooms.roomId, input.roomId));
+		}
 	}
 
 	/** Drop a room that is detaching itself. Idempotent: leaving twice is not an error. */
@@ -305,6 +317,11 @@ export class EventGroup {
 					return { ok: false, status: 404, error: 'That division is not in this event group' };
 				}
 				await this.db.update(groupRooms).set({ label: action.label }).where(eq(groupRooms.roomId, action.roomId));
+				try {
+					await this.rooms.setDivisionNickname(action.roomId, request.groupId, action.label);
+				} catch (error) {
+					console.error('Failed to set nickname on room', action.roomId, error);
+				}
 				break;
 			}
 

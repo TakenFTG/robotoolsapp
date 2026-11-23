@@ -3,6 +3,7 @@ import { ConnectionCloseCode } from '@robotools.app/wrpc/client';
 import type { WebSocket as NodeWebSocket } from 'ws';
 import {
 	RefCloseReason,
+	type RefereeRole,
 	buildRefRoomJoinUrl,
 	type CreateRefRoomRequest,
 	type LinkedDivision,
@@ -23,13 +24,16 @@ import type { EmailContext } from '../server-router';
 import { fetchEventMatches } from '../matches/source';
 import { buildRefRetentionWarningEmail } from '../email/template';
 import { describeSmtpFailure } from '../email/smtp';
-import { refMetadata, referees } from './schema';
+import { incidents, refMetadata, referees } from './schema';
 import {
 	addLinkedDivisions,
 	createRefRoom,
 	createUnclaimedRefRoom,
+	addReferee,
 	getIncidentRows,
+	getIncidents,
 	getLinkedDivisions,
+	getReferees,
 	getLinkedGroupId,
 	getRefereeByToken,
 	getRefMetadata,
@@ -40,12 +44,14 @@ import {
 	isLinkedDivision,
 	removeJudgeNote,
 	removeLinkedDivision,
+	removeReferee,
 	saveJudgeNote,
 	type IncidentRow
 } from './store';
 import type { JudgesLinkGateway, RedeemedDivision } from './link-gateway';
 import { refServerRouter, type RefServerContext } from './router';
-import { eq } from 'drizzle-orm';
+import { count, eq } from 'drizzle-orm';
+import type { AdminRefRoomDetail, AdminRefRoomSummary } from '@robotools.app/protocol/src/admin';
 
 /** The shortest gap the refresh button can force between two RobotEvents calls. */
 const MATCH_REFRESH_FLOOR_MS = 30 * 1000;
@@ -555,6 +561,89 @@ export class RefRoom {
 
 	private invalidateMatches(): void {
 		this.matchesCache = { ...this.matchesCache, fetchedAt: null };
+	}
+
+	// ============================================================================
+	// Operator admin
+	// ============================================================================
+
+	/**
+	 * What the operator's list shows. Null for a file with no event in it.
+	 *
+	 * Counts, not contents, the same line the Judges' Room draws: no incident and no note
+	 * leaves the room this way.
+	 */
+	async adminSummary(): Promise<AdminRefRoomSummary | null> {
+		const row = await getRefMetadata(this.db);
+		if (!row) {
+			return null;
+		}
+		const [refs] = await this.db.select({ value: count() }).from(referees);
+		const linked = await getLinkedDivisions(this.db);
+		return {
+			refRoomId: this.roomId,
+			eventName: row.eventName,
+			program: row.program,
+			robotEventsSku: row.robotEventsSku,
+			createdAt: row.createdAt.getTime(),
+			lastActivityAt: row.lastActivityAt?.getTime() ?? null,
+			refereeCount: refs?.value ?? 0,
+			linkedDivisionCount: linked.length
+		};
+	}
+
+	async adminDetail(): Promise<AdminRefRoomDetail | null> {
+		const summary = await this.adminSummary();
+		const row = await getRefMetadata(this.db);
+		if (!summary || !row) {
+			return null;
+		}
+		const refRows = await this.db
+			.select({ id: referees.id, name: referees.name, role: referees.role })
+			.from(referees)
+			.orderBy(referees.createdAt);
+		const linked = await getLinkedDivisions(this.db);
+		const [incidentTotal] = await this.db.select({ value: count() }).from(incidents);
+		return {
+			...summary,
+			divisions: row.divisions,
+			referees: refRows,
+			linkedDivisions: linked.map((division) => ({
+				judgesRoomId: division.judgesRoomId,
+				label: division.label,
+				linkedAt: division.linkedAt
+			})),
+			linkedGroupId: row.linkedGroupId,
+			incidentCount: incidentTotal?.value ?? 0,
+			onlineDeviceCount: this.sockets.size
+		};
+	}
+
+	/**
+	 * Add a ref on the operator's behalf, returning their link once.
+	 *
+	 * The recovery path for a room whose only Head Referee lost their link, and the way an
+	 * unclaimed room gets its first ref without anyone in it.
+	 */
+	async adminAddReferee(name: string, role: RefereeRole): Promise<string> {
+		if (!(await getRefMetadata(this.db))) {
+			throw new Error('Ref room not found');
+		}
+		const row = await addReferee(this.db, { name, role, email: null });
+		void this.wsHandler.broadcast<RefClientRouter>().onRefereesUpdate.mutation(await getReferees(this.db));
+		return row.authToken;
+	}
+
+	/** Remove a ref exactly as a Head Ref would: link dead at once, their incidents kept. */
+	async adminRemoveReferee(refereeId: string): Promise<void> {
+		await removeReferee(this.db, refereeId);
+		await this.kickReferee(refereeId, RefCloseReason.ACCESS_CHANGED);
+		const broadcast = this.wsHandler.broadcast<RefClientRouter>();
+		void broadcast.onRefereesUpdate.mutation(await getReferees(this.db));
+		// Their incidents lost the author id; resend them so every device agrees.
+		for (const incident of (await getIncidents(this.db)).filter((item) => item.authorRefereeId === null)) {
+			void broadcast.onIncidentSaved.mutation(incident);
+		}
 	}
 
 	// ============================================================================
