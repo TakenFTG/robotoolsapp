@@ -3,8 +3,9 @@
  *
  * Kept deliberately narrow — one method, no templating, no queue — so the room routes can
  * be tested against a fake and the operator can point the server at any mail provider
- * without a code change. SMTP was chosen over a vendor HTTP API for exactly that reason:
- * Brevo, SMTP2GO, Resend, Google Workspace and a relay on the LAN all speak it.
+ * without a code change. SMTP is the general-purpose path — Brevo, SMTP2GO, Resend,
+ * Google Workspace and a relay on the LAN all speak it — and Amazon SES has its own over
+ * its HTTPS API, which keeps the server's IP out of the message headers.
  */
 
 export interface EmailMessage {

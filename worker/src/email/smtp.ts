@@ -53,12 +53,20 @@ export function createSmtpSender(config: SmtpConfig): EmailSender {
 		return transporter;
 	}
 
+	return createNodemailerSender(config.from, transport);
+}
+
+/**
+ * The send-and-record half shared by every nodemailer transport (SMTP here, SES in
+ * ses.ts), so the rejected-recipient check and the handoff log line cannot drift apart.
+ */
+export function createNodemailerSender(from: string, transport: () => Transporter): EmailSender {
 	return {
 		enabled: true,
-		fromAddress: config.from,
+		fromAddress: from,
 		async send(message: EmailMessage): Promise<void> {
 			const info = await transport().sendMail({
-				from: config.from,
+				from,
 				to: message.to,
 				subject: message.subject,
 				text: message.text,
@@ -68,8 +76,9 @@ export function createSmtpSender(config: SmtpConfig): EmailSender {
 			// sendMail resolves when *any* recipient was accepted, so a rejected address on
 			// a multi-recipient message would otherwise look like a success. Every message
 			// here goes to one judge, which makes a non-empty `rejected` unambiguous.
-			if (info.rejected.length > 0) {
-				throw new Error(`The mail server rejected ${info.rejected.length} recipient(s): ${info.response}`);
+			const rejected = info.rejected ?? [];
+			if (rejected.length > 0) {
+				throw new Error(`The mail server rejected ${rejected.length} recipient(s): ${info.response}`);
 			}
 
 			// Record the handoff. Without this an accepted-then-dropped message is
@@ -111,7 +120,13 @@ export function describeSmtpFailure(error: unknown): string {
 	const err = error as { code?: unknown; responseCode?: unknown; response?: unknown; message?: unknown };
 	const parts: string[] = [];
 
-	if (typeof err.code === 'string') {
+	// The AWS SDK's errors carry their kind in `name` (MessageRejected, Throttling, ...),
+	// and nodemailer's SES transport stamps the generic ESES code on them. The name is the
+	// part a Judge Advisor can act on, so it takes the code's place.
+	const name = (error as { name?: unknown }).name;
+	if (err.code === 'ESES' && typeof name === 'string' && name !== 'Error') {
+		parts.push(name);
+	} else if (typeof err.code === 'string') {
 		parts.push(err.code);
 	}
 	if (typeof err.responseCode === 'number') {

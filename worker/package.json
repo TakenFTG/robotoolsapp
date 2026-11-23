@@ -31,18 +31,19 @@
 		"prettier": "^3.9.6",
 		"typescript": "^6.0.3",
 		"typescript-eslint": "^8.67.0",
-		"vitest": "^4.1.10"
+		"vitest": "^4.1.12"
 	},
 	"dependencies": {
+		"@aws-sdk/client-sesv2": "^3.1175.0",
 		"@robotools.app/protocol": "workspace:*",
 		"@robotools.app/web": "workspace:*",
 		"@robotools.app/wrpc": "workspace:*",
 		"better-sqlite3": "^13.0.3",
 		"drizzle-orm": "^0.45.2",
 		"events.vex": "^7.0.1",
-		"nodemailer": "^8.0.10",
+		"nodemailer": "^10.6.1",
 		"ws": "^8.21.0",
-		"zod": "^4.4.3"
+		"zod": "^4.6.7"
 	},
 	"type": "module"
 }

@@ -1,3 +1,4 @@
+import { createSesSender } from './ses';
 import { createSmtpSender } from './smtp';
 import { disabledEmailSender, type EmailSender } from './types';
 
@@ -14,6 +15,11 @@ export interface EmailEnv extends Record<string, string | undefined> {
 	SMTP_FROM?: string;
 	SMTP_SECURE?: string;
 	SMTP_EHLO_NAME?: string;
+	SES_REGION?: string;
+	SES_FROM?: string;
+	SES_CONFIGURATION_SET?: string;
+	AWS_ACCESS_KEY_ID?: string;
+	AWS_SECRET_ACCESS_KEY?: string;
 	PUBLIC_ORIGIN?: string;
 }
 
@@ -65,6 +71,10 @@ function parseOrigin(raw: string): string {
  * someone depends on it, which at an event is the middle of judge check-in.
  */
 export function readEmailConfiguration(env: EmailEnv): EmailConfiguration {
+	if (env.SES_REGION?.trim() || env.SES_FROM?.trim()) {
+		return readSesConfiguration(env);
+	}
+
 	const host = env.SMTP_HOST?.trim() || null;
 	const from = env.SMTP_FROM?.trim() || null;
 	const origin = env.PUBLIC_ORIGIN?.trim() || null;
@@ -103,6 +113,44 @@ export function readEmailConfiguration(env: EmailEnv): EmailConfiguration {
 			// service is reached on a name the mail side does not recognise.
 			ehloName: env.SMTP_EHLO_NAME?.trim() || new URL(parseOrigin(origin)).hostname,
 			from
+		}),
+		publicOrigin: parseOrigin(origin)
+	};
+}
+
+/**
+ * Amazon SES over its HTTPS API. Chosen by SES_REGION, and exclusive with SMTP: with both
+ * set there is no telling which one the operator expects mail to leave through.
+ */
+function readSesConfiguration(env: EmailEnv): EmailConfiguration {
+	const region = env.SES_REGION?.trim() || null;
+	const from = env.SES_FROM?.trim() || null;
+	const origin = env.PUBLIC_ORIGIN?.trim() || null;
+
+	if (env.SMTP_HOST?.trim() || env.SMTP_FROM?.trim()) {
+		throw new Error('Both SES_* and SMTP_* are set. Configure one mail provider: unset SMTP_HOST/SMTP_FROM or SES_REGION/SES_FROM.');
+	}
+	if (!region || !from) {
+		throw new Error('Set both SES_REGION and SES_FROM to send through Amazon SES.');
+	}
+	if (!/^[a-z]{2}(-[a-z]+)+-\d+$/.test(region)) {
+		throw new Error(`SES_REGION must be an AWS region such as ap-southeast-2, got ${JSON.stringify(region)}`);
+	}
+	if (!origin) {
+		throw new Error('PUBLIC_ORIGIN is required when SES is configured — it is the address emailed links point at.');
+	}
+
+	// Credentials are optional (an instance role works too), but half a key pair is never
+	// right, and the SDK would only say so on the first send — mid check-in.
+	if (Boolean(env.AWS_ACCESS_KEY_ID?.trim()) !== Boolean(env.AWS_SECRET_ACCESS_KEY?.trim())) {
+		throw new Error('Set both AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY, or neither.');
+	}
+
+	return {
+		sender: createSesSender({
+			region,
+			from,
+			configurationSet: env.SES_CONFIGURATION_SET?.trim() || null
 		}),
 		publicOrigin: parseOrigin(origin)
 	};

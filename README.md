@@ -83,6 +83,7 @@ Everything is set by environment variable, and all of it is optional:
 | `ADMIN_USERNAME`, `ADMIN_PASSWORD` | Turn on the operator view at `/admin`. Set both or neither. |
 | `SMTP_HOST`, `SMTP_FROM`, `PUBLIC_ORIGIN` | Email access links. These three go together. |
 | `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_SECURE`, `SMTP_EHLO_NAME` | Fine-tune the mail connection. |
+| `SES_REGION`, `SES_FROM`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `SES_CONFIGURATION_SET` | Send through Amazon SES's API instead of SMTP. Use one or the other. |
 | `RETENTION_ENABLED`, `RETENTION_WARN_AFTER_DAYS`, `RETENTION_DELETE_AFTER_DAYS` | Idle-event deletion. On by default: warn at 6 days, delete at 7. |
 | `PORT`, `HOST`, `DATA_DIR`, `STATIC_DIR` | Where the server listens and keeps its files. `STATIC_DIR=none` serves the API only. |
 
