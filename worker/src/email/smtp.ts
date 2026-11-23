@@ -70,7 +70,17 @@ export function createNodemailerSender(from: string, transport: () => Transporte
 				to: message.to,
 				subject: message.subject,
 				text: message.text,
-				html: message.html
+				html: message.html,
+				// Attached rather than linked: an embedded image shows without the reader
+				// pressing "load images", and fetching nothing from our server means the
+				// message cannot tell us when it was opened.
+				attachments: message.inlineImages?.map((image) => ({
+					cid: image.cid,
+					filename: image.filename,
+					contentType: image.contentType,
+					content: image.content,
+					contentDisposition: 'inline' as const
+				}))
 			});
 
 			// sendMail resolves when *any* recipient was accepted, so a rejected address on

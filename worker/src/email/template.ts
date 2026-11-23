@@ -1,4 +1,20 @@
-import type { EmailMessage } from './types';
+import { LOGO_PNG_BASE64 } from './logo';
+import type { EmailMessage, InlineImage } from './types';
+
+const LOGO: InlineImage = {
+	cid: 'logo@robotools.app',
+	filename: 'robotools.png',
+	contentType: 'image/png',
+	content: Buffer.from(LOGO_PNG_BASE64, 'base64')
+};
+
+/**
+ * The top of every message's card: the logo, small and centred (`align` as well as
+ * `text-align` and auto margins, because older Outlook honours only the attribute). Width and height are both set so a
+ * client that blocks images keeps the space and shows the alt text instead of reflowing.
+ */
+const LOGO_HTML = `<p align="center" style="margin:0 0 20px;text-align:center;"><img src="cid:${LOGO.cid}" alt="Robo Tools" width="80" height="75" style="display:block;margin:0 auto;border:0;width:80px;height:75px;" /></p>
+`;
 
 export interface AccessLinkEmailInput {
 	judgeName: string;
@@ -29,7 +45,7 @@ function singleLine(value: string): string {
  * The message a judge receives.
  *
  * Written to survive being read on a phone in a noisy sports hall thirty seconds before
- * the first interview. No branding, no preamble, the link high up, and an explicit warning
+ * the first interview. A small logo and no preamble, the link high up, and an explicit warning
  * that the link is personal — judges forward things to each other by default, and a
  * forwarded link means two people submitting rubrics as the same judge.
  *
@@ -62,7 +78,7 @@ export function buildAccessLinkEmail(input: AccessLinkEmailInput): EmailMessage 
 <html>
 	<body style="margin:0;padding:24px;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#0f172a;">
 		<div style="max-width:520px;margin:0 auto;background:#ffffff;border-radius:8px;padding:28px;">
-			<p style="margin:0 0 16px;font-size:16px;">Hello ${escapeHtml(judgeName)},</p>
+			${LOGO_HTML}			<p style="margin:0 0 16px;font-size:16px;">Hello ${escapeHtml(judgeName)},</p>
 			<p style="margin:0 0 24px;font-size:16px;">
 				You have been added as a judge for <strong>${escapeHtml(eventName)}</strong>.
 			</p>
@@ -89,7 +105,7 @@ export function buildAccessLinkEmail(input: AccessLinkEmailInput): EmailMessage 
 	</body>
 </html>`;
 
-	return { to: input.to, subject, text, html };
+	return { to: input.to, subject, text, html, inlineImages: [LOGO] };
 }
 
 export interface AdvisorAccessLinkEmailInput {
@@ -152,7 +168,7 @@ export function buildAdvisorAccessLinkEmail(input: AdvisorAccessLinkEmailInput):
 <html>
 	<body style="margin:0;padding:24px;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#0f172a;">
 		<div style="max-width:520px;margin:0 auto;background:#ffffff;border-radius:8px;padding:28px;">
-			<p style="margin:0 0 16px;font-size:16px;">Hello ${escapeHtml(advisorName)},</p>
+			${LOGO_HTML}			<p style="margin:0 0 16px;font-size:16px;">Hello ${escapeHtml(advisorName)},</p>
 			<p style="margin:0 0 24px;font-size:16px;">
 				You are the Judge Advisor for the ${what} <strong>${escapeHtml(contextName)}</strong>.
 			</p>
@@ -175,7 +191,7 @@ export function buildAdvisorAccessLinkEmail(input: AdvisorAccessLinkEmailInput):
 	</body>
 </html>`;
 
-	return { to: input.to, subject, text, html };
+	return { to: input.to, subject, text, html, inlineImages: [LOGO] };
 }
 
 export interface RetentionWarningEmailInput {
@@ -227,7 +243,7 @@ export function buildRetentionWarningEmail(input: RetentionWarningEmailInput): E
 <html>
 	<body style="margin:0;padding:24px;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#0f172a;">
 		<div style="max-width:520px;margin:0 auto;background:#ffffff;border-radius:8px;padding:28px;">
-			<p style="margin:0 0 16px;font-size:16px;">Hello ${escapeHtml(advisorName)},</p>
+			${LOGO_HTML}			<p style="margin:0 0 16px;font-size:16px;">Hello ${escapeHtml(advisorName)},</p>
 			<p style="margin:0 0 24px;font-size:16px;">
 				<strong>${escapeHtml(eventName)}</strong> has been inactive for a while and will be permanently deleted
 				${escapeHtml(days)}.
@@ -254,7 +270,7 @@ export function buildRetentionWarningEmail(input: RetentionWarningEmailInput): E
 	</body>
 </html>`;
 
-	return { to: input.to, subject, text, html };
+	return { to: input.to, subject, text, html, inlineImages: [LOGO] };
 }
 
 export interface RefAccessLinkEmailInput {
@@ -299,7 +315,7 @@ export function buildRefAccessLinkEmail(input: RefAccessLinkEmailInput): EmailMe
 <html>
 	<body style="margin:0;padding:24px;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#0f172a;">
 		<div style="max-width:520px;margin:0 auto;background:#ffffff;border-radius:8px;padding:28px;">
-			<p style="margin:0 0 16px;font-size:16px;">Hello ${escapeHtml(refereeName)},</p>
+			${LOGO_HTML}			<p style="margin:0 0 16px;font-size:16px;">Hello ${escapeHtml(refereeName)},</p>
 			<p style="margin:0 0 24px;font-size:16px;">
 				You have been added as ${role} for <strong>${escapeHtml(eventName)}</strong>.
 			</p>
@@ -324,7 +340,7 @@ export function buildRefAccessLinkEmail(input: RefAccessLinkEmailInput): EmailMe
 	</body>
 </html>`;
 
-	return { to: input.to, subject, text, html };
+	return { to: input.to, subject, text, html, inlineImages: [LOGO] };
 }
 
 export interface RefRetentionWarningEmailInput {
@@ -361,7 +377,7 @@ export function buildRefRetentionWarningEmail(input: RefRetentionWarningEmailInp
 <html>
 	<body style="margin:0;padding:24px;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#0f172a;">
 		<div style="max-width:520px;margin:0 auto;background:#ffffff;border-radius:8px;padding:28px;">
-			<p style="margin:0 0 16px;font-size:16px;">Hello ${escapeHtml(refereeName)},</p>
+			${LOGO_HTML}			<p style="margin:0 0 16px;font-size:16px;">Hello ${escapeHtml(refereeName)},</p>
 			<p style="margin:0 0 24px;font-size:16px;">
 				The referee notes for <strong>${escapeHtml(eventName)}</strong> have not been used for a while and will be
 				permanently deleted ${escapeHtml(days)}.
@@ -381,5 +397,5 @@ export function buildRefRetentionWarningEmail(input: RefRetentionWarningEmailInp
 	</body>
 </html>`;
 
-	return { to: input.to, subject, text, html };
+	return { to: input.to, subject, text, html, inlineImages: [LOGO] };
 }

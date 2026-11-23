@@ -13,6 +13,15 @@ export interface EmailMessage {
 	subject: string;
 	text: string;
 	html: string;
+	/** Images the HTML references as `cid:<cid>`, sent inside the message itself. */
+	inlineImages?: InlineImage[];
+}
+
+export interface InlineImage {
+	cid: string;
+	filename: string;
+	contentType: string;
+	content: Buffer;
 }
 
 export interface EmailSender {
