@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { resolve, asset } from '$app/paths';
+	import FlagIcon from '$lib/icon/FlagIcon.svelte';
 
 	/**
 	 * Written as plain English markup rather than through paraglide, exactly as the privacy
@@ -133,7 +134,8 @@
 								<div>
 									<h3 class="mb-2 text-xl font-semibold">Overview</h3>
 									<p class="mb-2 leading-relaxed text-gray-700">
-										Opening your link brings you to <strong>Overview</strong>, your home page. Your name and judge group are at the top.
+										Opening your link brings you to <strong>Overview</strong>, your home page. At the top are your name, your judge group
+										and the judges you're <strong>paired with</strong>, so you can find each other.
 									</p>
 									<p class="leading-relaxed text-gray-700">
 										Every task starts here. Each one opens in its own tab, and you can tap <strong>Overview</strong> at any time to come back.
@@ -153,16 +155,17 @@
 										or give it the benefit of the doubt.
 									</p>
 									<p class="mb-2 leading-relaxed text-gray-700">
-										Once it's sorted, tap <strong>Start Rubric</strong> to score the notebook from 1 to 4 on each criterion. Work through
-										each criterion, then tap <strong>Submit Rubric</strong> to save it.
+										Once it's sorted, tap <strong>Start Rubric</strong> to score the notebook from 1 to 4 on each criterion: tap the box
+										beside a criterion and pick its score. Work through each criterion, then tap <strong>Submit Rubric</strong> to save it.
 									</p>
 									<details class="text-gray-700">
 										<summary class="cursor-pointer text-sm font-medium text-blue-700">More about sorting</summary>
 										<ul class="mt-2 ml-4 list-disc space-y-2 text-sm leading-relaxed">
 											<li>Fully Developed is required for the Design, Innovate and Excellence Awards.</li>
 											<li>
-												Tick <strong>Submitted with a Season Summary</strong> as you scan. GRSF asks for those notebooks to be scored first, and
-												the lists put them at the top. It only records that a summary is there; summaries are never scored.
+												Tick <strong>Submitted with a Season Summary</strong> as you scan. GRSF asks for those notebooks to be scored first,
+												so they get an <strong class="text-blue-700">SS</strong> badge and the lists put them at the top. It only records that
+												a summary is there; summaries are never scored.
 											</li>
 											<li>
 												A team with a notebook link can be scored straight away, without sorting first. You choose its category when you
@@ -182,7 +185,7 @@
 										<strong>Take / Add Photos</strong> to snap images of the robot to refer back to later. If you need them, the
 										<strong>sample questions</strong> in each section can help guide the conversation; two or three is plenty.
 									</p>
-									<p class="leading-relaxed text-gray-700">Score each criterion on what you hear:</p>
+									<p class="leading-relaxed text-gray-700">Pick a score for each criterion on what you hear:</p>
 									<ul class="mt-1 mb-2 ml-4 list-disc space-y-1 text-gray-700">
 										<li><strong>2 · Heard, with Specifics</strong>: the team gave concrete details</li>
 										<li><strong>1 · Heard</strong>: the team addressed it generally</li>
@@ -228,7 +231,45 @@
 									<strong>Your group's teams are shown by default.</strong> Untick the filter to see every team.
 								</li>
 								<li><strong>Left the room by mistake?</strong> Open your link again to get back in.</li>
+								<li>
+									<strong>On a laptop?</strong> Press <strong>Tab</strong> to move to the next criterion on a rubric, then press a number to score
+									it.
+								</li>
+								<li>
+									<strong>Want another look at a team?</strong> Tap the <strong>flag</strong> beside it in Teams &amp; Rubrics or Excellence Award
+									Candidates to flag it for a second interview or more discussion, with an optional reason. Every judge sees the flag, and anyone
+									can clear it.
+								</li>
 							</ul>
+						</div>
+
+						<div>
+							<h3 class="mb-3 text-lg font-semibold">What the badges mean</h3>
+							<dl class="grid gap-3 sm:grid-cols-3">
+								<div class="flex gap-3 rounded-lg border border-gray-200 p-3">
+									<dt class="w-8 shrink-0 text-sm font-semibold text-blue-700">SS</dt>
+									<dd class="text-sm text-gray-600">
+										Submitted with a <strong>Season Summary</strong>. Score these notebooks first. Shown on Notebook Sorting and Teams &amp;
+										Rubrics.
+									</dd>
+								</div>
+								<div class="flex gap-3 rounded-lg border border-gray-200 p-3">
+									<dt class="w-8 shrink-0 text-sm font-semibold text-green-700">NB</dt>
+									<dd class="text-sm text-gray-600">
+										The team has a <strong>notebook</strong>: a digital link, or a paper one sorted as handed in. Shown to the Judge Advisor
+										when assigning teams.
+									</dd>
+								</div>
+								<div class="flex gap-3 rounded-lg border border-gray-200 p-3">
+									<dt class="w-8 shrink-0 text-amber-700">
+										<FlagIcon class="h-5 w-5 fill-amber-400" />
+										<span class="sr-only">Flag</span>
+									</dt>
+									<dd class="text-sm text-gray-600">
+										<strong>Flagged for follow-up</strong> by a judge. Hover or tap it to read why. Grey means not flagged.
+									</dd>
+								</div>
+							</dl>
 						</div>
 
 						<div>
@@ -236,7 +277,10 @@
 							<dl class="grid gap-3 sm:grid-cols-2">
 								<div class="rounded-lg border border-gray-200 p-3">
 									<dt class="font-semibold">Free time</dt>
-									<dd class="text-sm text-gray-600">When each team next has a long enough gap between matches for an interview.</dd>
+									<dd class="text-sm text-gray-600">
+										Each team's next three gaps between matches long enough for an interview, as cards you can sort by soonest break or team
+										number.
+									</dd>
 								</div>
 								<div class="rounded-lg border border-gray-200 p-3">
 									<dt class="font-semibold">Matches &amp; Skills</dt>
@@ -250,10 +294,17 @@
 									<dt class="font-semibold">Note for the refs' record</dt>
 									<dd class="text-sm text-gray-600">Pass something about one of your teams on to the referees.</dd>
 								</div>
-								<div class="rounded-lg border border-gray-200 p-3 sm:col-span-2">
+								<div class="rounded-lg border border-gray-200 p-3">
+									<dt class="font-semibold">Excellence Award Candidates</dt>
+									<dd class="text-sm text-gray-600">
+										A card per team showing which Excellence criteria it meets, its notebook status and its interview rank.
+									</dd>
+								</div>
+								<div class="rounded-lg border border-gray-200 p-3">
 									<dt class="font-semibold">Teams &amp; Rubrics</dt>
 									<dd class="text-sm text-gray-600">
-										Below the task list: every team's notebook link, the rubrics submitted for it, and its photos.
+										Below the task list: every team's notebook link, the rubrics submitted for it, and its photos. Tick the filter to show
+										only flagged teams.
 									</dd>
 								</div>
 							</dl>
@@ -316,6 +367,24 @@
 							<ul class="ml-4 list-disc space-y-2 leading-relaxed text-gray-700">
 								<li>
 									<strong>A judge doesn't turn up?</strong> Use <strong>Judges overview</strong> to move their teams to another group.
+								</li>
+								<li>
+									<strong>Need a hand handing out links?</strong> In <strong>Users</strong>, make a trusted judge a
+									<strong>Lead Judge</strong>. They get <strong>Manage judges</strong> in their menu to add judges and give them their links,
+									but can't edit or remove anyone.
+								</li>
+								<li>
+									<strong>Assigning teams?</strong> Team cards on <strong>Judges overview</strong> show
+									<strong class="text-green-700">NB</strong>
+									for a notebook and <strong class="text-blue-700">SS</strong> for a Season Summary, so you can spread notebooks across groups.
+								</li>
+								<li>
+									<strong>Who changed that?</strong> <strong>Activity log</strong> in the menu shows who submitted, edited or deleted rubrics,
+									flagged teams, and changed team details, rankings, judges or setup. It filters by person, team and type and exports to CSV.
+								</li>
+								<li>
+									<strong>Long event name?</strong> Give it a short <strong>nickname</strong> from <strong>Switch event</strong>. Every
+									judge sees it, with the full name underneath.
 								</li>
 								<li>
 									<strong>A device goes missing?</strong> In <strong>Users</strong>, <strong>rotate</strong> that person's link. The old link
