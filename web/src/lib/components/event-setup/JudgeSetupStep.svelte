@@ -50,7 +50,12 @@
 
 	// If teams are updated, we need to convert TeamInfoAndData to EditingTeam for judge groups
 	// Since judgeGroups still use EditingTeam internally, we need conversion logic
-	$effect(() => {
+	//
+	// A pre-effect, so the available teams are filled in before the first render. As a plain
+	// effect it ran after it: the dndzone set itself up on an empty list, the cards appeared
+	// a moment later, and nothing told the action about them, so they could not be dragged
+	// until the step was left and opened again.
+	$effect.pre(() => {
 		const allIncludedTeams = teamsProp.filter((team) => !team.absent);
 		const allIncludedTeamIds = new Set(allIncludedTeams.map((team) => team.id));
 
