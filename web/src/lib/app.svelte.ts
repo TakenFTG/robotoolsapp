@@ -545,7 +545,11 @@ export class App {
 			throw new Error('That event group has no divisions yet');
 		}
 
+		// Staying put still has to mean being *in* that room. On a fresh page load the active
+		// permit comes from storage and nothing has connected yet, so returning here left the
+		// app on "Joining Judges' Room..." forever. switchToEvent is a no-op when connected.
 		if (this.permit && divisions.some((division) => division.roomId === this.permit?.roomId)) {
+			await this.switchToEvent(this.permit.roomId);
 			return;
 		}
 
