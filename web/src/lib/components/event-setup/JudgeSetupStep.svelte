@@ -296,8 +296,8 @@
 			{#each judgeGroups as judgeGroup, index (judgeGroup.id)}
 				<JudgeGroup
 					judgeGroup={judgeGroups[index]}
-					{selectedItems}
-					{activeZoneId}
+					bind:selectedItems
+					bind:activeZoneId
 					onDeleteGroup={deleteJudgeGroup}
 					showGrade={!allTeamsHaveSameGrade}
 					showAssignedTeams={judgingMethod === 'assigned'}
